@@ -1,7 +1,7 @@
 name: Test and package
 on:
   push:
-    branches-ignore: ["release/public-*"]
+    branches-ignore: ["release/public-*", "qa/*"]
   pull_request:
   workflow_dispatch:
 
