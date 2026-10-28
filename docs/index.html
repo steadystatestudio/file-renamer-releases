@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>File Renamer — Preview every filename</title>
+  <meta name="description" content="A free desktop batch file renamer for Windows and Linux. Combine rules, preview changes, and undo the latest batch. Your files stay on your computer.">
+  <link rel="canonical" href="https://steady-state-studio.rpxjjnqmguarhzkg.chatgpt.site/apps/file-renamer/">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="icon.svg" width="72" height="72" alt="">
+      <p class="studio">Steady State Studio</p>
+      <h1>File Renamer</h1>
+      <p class="tagline">A new name. Same file.</p>
+      <p>Rename a whole batch with a clear preview of every change.<br class="wide"> Free, open source, and local to your computer.</p>
+      <nav aria-label="Project links">
+        <a class="button" href="https://github.com/steadystatestudio/file-renamer-releases">Get File Renamer</a>
+        <a class="secondary" href="https://ko-fi.com/steadystatestudio">Support on Ko-fi <span aria-hidden="true">♥</span></a>
+      </nav>
+      <p class="platforms">Windows &amp; Linux · MIT license</p>
+    </header>
+
+    <figure>
+      <img src="screenshot.png" width="960" height="860" alt="File Renamer showing original and proposed filenames, an ordered list of rules, and Rename and Undo controls.">
+      <figcaption>Build your rules. Check the names. Rename when you’re ready.</figcaption>
+    </figure>
+
+    <section aria-labelledby="workflow">
+      <h2 id="workflow">From a folder of files to a consistent set.</h2>
+      <div class="features">
+        <article><span class="step">01</span><h3>Bring your files</h3><p>Drop files or folders onto the window. Choose exactly which files to include.</p></article>
+        <article><span class="step">02</span><h3>Put rules in order</h3><p>Replace text, change case, add numbers, clean up names, or use regular expressions. Save combinations as presets.</p></article>
+        <article><span class="step">03</span><h3>Preview, then rename</h3><p>Inspect every new name and resolve conflicts before renaming. Undo the latest batch, even after restarting.</p></article>
+      </div>
+    </section>
+
+    <section class="start" aria-labelledby="get-started">
+      <h2 id="get-started">Get started</h2>
+      <p>Find setup instructions and the source code on GitHub. Reviewed releases provide a portable Windows ZIP, Linux AppImage, checksums, and matching source archives.</p>
+      <div class="links">
+        <a href="https://github.com/steadystatestudio/file-renamer-releases#run">Setup instructions <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/steadystatestudio/file-renamer-releases/releases">Windows &amp; Linux builds <span aria-hidden="true">↗</span></a>
+      </div>
+      <p class="note">Public release downloads do not require a GitHub account. Packages are unsigned; verify checksums and follow your security policy. Linux requires x86-64, glibc 2.35 or newer, and the desktop libraries listed with the package.</p>
+    </section>
+
+    <section class="faq" aria-labelledby="questions">
+      <h2 id="questions">A few useful details</h2>
+      <details><summary>Does it upload my files?</summary><p>No. File scanning, previews, and renaming happen on your computer. No account or internet connection is needed to use the app. The optional Donate link opens Ko-fi in your browser.</p></details>
+      <details><summary>Does it change file contents or folder names?</summary><p>Only filenames change. Files stay in their original folders, and their contents stay intact. Adding a folder collects its files; it does not rename the folder.</p></details>
+      <details><summary>What if a name already exists?</summary><p>Conflicts are shown in the preview. Existing files are never overwritten. The app checks again before applying changes.</p></details>
+      <details><summary>How does undo work?</summary><p>The latest batch can be undone, including after restarting the app. Starting another batch replaces that undo history. If files have changed or original names are occupied, the app stops and explains the conflict.</p></details>
+    </section>
+    <footer>
+      <span>© 2026 Steady State Studio</span>
+      <div><a href="https://github.com/steadystatestudio/file-renamer-releases">GitHub</a><a href="https://ko-fi.com/steadystatestudio">Support on Ko-fi ♥</a><a href="https://github.com/steadystatestudio/file-renamer-releases/blob/main/LICENSE">MIT license</a></div>
+    </footer>
+  </main>
+</body>
+</html>

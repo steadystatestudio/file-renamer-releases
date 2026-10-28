@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "steady-file-renamer"
+version = "2.0.2"
+description = "A local, preview-first desktop batch file renamer."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.8,<7", "tomli-w>=1.2,<2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.4"]
+packaging = ["PyInstaller>=6.11,<7", "Pillow>=10"]
+
+[project.gui-scripts]
+file-renamer = "file_renamer.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+file_renamer = ["assets/*.svg", "assets/*.json", "assets/*.pas", "assets/tools/**/*", "assets/tools/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

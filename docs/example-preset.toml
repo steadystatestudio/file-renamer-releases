@@ -1,0 +1,32 @@
+# File Renamer rule preset. Edit with any UTF-8 text editor.
+# Rules run from top to bottom; enabled = false skips a rule.
+# target: stem = name without extension, extension = extension only, name = full filename.
+# Back up again to regenerate these comments.
+
+version = 1
+name = "Listing photos"
+
+[[rules]]
+kind = "accents"
+target = "stem"
+enabled = true
+
+[rules.options]
+
+[[rules]]
+kind = "cleanup"
+target = "stem"
+enabled = true
+
+[rules.options]
+trim = true
+collapse = true
+separator = "-"
+
+[[rules]]
+kind = "case"
+target = "name"
+enabled = true
+
+[rules.options]
+mode = "lower"
