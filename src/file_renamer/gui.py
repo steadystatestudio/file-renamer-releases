@@ -179,13 +179,13 @@ class StateDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.Antialiasing)
         if not index.flags() & Qt.ItemIsUserCheckable:
             painter.setOpacity(0.45)
-        color = proposed_name_color()
+        checked = index.data(Qt.CheckStateRole) in (Qt.Checked, Qt.Checked.value)
+        color = option.palette.highlight().color() if checked else proposed_name_color()
         painter.setPen(QPen(color, 1))
-        painter.setBrush(color if index.data(Qt.CheckStateRole) in (Qt.Checked, Qt.Checked.value) else Qt.NoBrush)
+        painter.setBrush(color if checked else Qt.NoBrush)
         rect = self.indicator_rect(option)
         painter.drawRoundedRect(rect, 5, 5)
-        checked = index.data(Qt.CheckStateRole) in (Qt.Checked, Qt.Checked.value)
-        painter.setPen(QColor("white") if checked else color)
+        painter.setPen(option.palette.highlightedText().color() if checked else color)
         painter.drawText(rect, Qt.AlignCenter, "On" if checked else "Off")
         painter.restore()
 

@@ -1,28 +1,34 @@
-# File Renamer 2.0.2 release preparation
+# Releasing File Renamer 2.0.3
 
-This is a candidate, not evidence that a public release already exists.
+The public `file-renamer-releases` repository contains the current source. Preserve
+the older private repository and its history; do not reset or mirror it.
 
-- Preserves the established drag/drop, ordered rules, preview, Rename and Undo
-  workflow. No redesign and no new account, upload or telemetry behavior.
-- ExifTool previews explicitly disable external `.ExifTool_config` files, so a
-  personal Perl configuration cannot execute as a side effect of metadata preview.
-- All existing rename, collision, restart recovery and undo checks run on both
-  native CI platforms. Packaged startup and real preview-worker checks run on
-  Windows and Linux, plus Linux X11/Xvfb.
-- Locked dependencies retain Qt 6.11.0. Packages carry license inventories,
-  replacement instructions and matching source-archive pins.
-- `release-candidate.yml` retains successful packages, checksums, synthetic QA,
-  and clean source in a **private draft**, bypassing Actions artifact storage.
-  It never publishes. `RELEASE-READY.json` only certifies the automated gates.
+After reviewed changes are merged to main, manually dispatch **Stage reviewed
+release candidate (draft only)** with the exact 40-character main commit and
+`v2.0.3`. The script rejects an automatic push, another branch/repository, a
+reviewed-commit mismatch, a tag/version mismatch, an existing moved tag, or any
+published release. The full paginated release inventory is inspected before a
+draft is created. Staging never publishes or changes repository visibility.
 
-Public distribution must use an audited clean source snapshot in
-`steadystatestudio/file-renamer-releases`, not expose the private development
-history. Keep matching library source archives available beside the binaries.
-Review the exact retained package inventory and checksums before publication.
-Windows binaries are unsigned: follow normal security policy; do not disable
-protection. Automated offscreen checks do not certify interactive Windows 10/11,
-high-DPI hardware, accessibility, or every Linux desktop/filesystem.
+A new dispatch may restage the same exact commit into its existing unpublished
+draft. Before replacing any assets, staging removes `RELEASE-READY.json`;
+finalization recreates it only after all receipts and digests pass for the new run.
+A different commit requires a new version/tag; an existing tag is never moved.
+Workflows for the same release tag are serialized.
 
-Start with copied sample files. Renaming changes filenames on disk; the most
-recent batch is undoable only while its files and journal remain intact. Existing
-external changes or occupied original filenames can require manual resolution.
+Both Windows Server 2022 and Ubuntu 22.04 must pass the full source suite, build
+native packages, and run the actual packaged preview helpers and GUI rename/Undo
+workflow. The diagnostic creates three synthetic files in a fresh folder, checks
+the preview, renames through the real UI, undoes the batch, and verifies original
+names and SHA-256 hashes. It refuses an existing destination. Native smoke reports
+and screenshots are retained without synthetic input files or local settings.
+
+The draft includes package checksums, source commit/tree metadata, passing tests,
+matching dependency sources and native library notices. Finalization verifies
+all retained asset digests before creating `RELEASE-READY.json`.
+
+Before publishing the stable release, inspect that receipt and exact bytes,
+validate the user-facing screenshots and exercise ordinary dialogs on the
+candidate. Keep unsigned-package instructions and actual platform limitations
+visible. Publish the verified bytes without changing their source tag. This
+workflow does not claim Ubuntu 24.04 compatibility or human accessibility testing.

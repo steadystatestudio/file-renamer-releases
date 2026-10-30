@@ -1,4 +1,4 @@
-"""Original Qt styling inspired by Square Photo Padder's desktop design."""
+"""Canonical Steady State Studio desktop colors and control styling."""
 from __future__ import annotations
 
 import os
@@ -47,7 +47,7 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
                         (QPalette.AlternateBase, "#4a4a4a" if dark else "#e2e2e2"),
                         (QPalette.Mid, border), (QPalette.Button, panel),
                         (QPalette.ButtonText, text), (QPalette.Highlight, selection),
-                        (QPalette.HighlightedText, "#ffffff"), (QPalette.ToolTipBase, panel),
+                        (QPalette.HighlightedText, "#111111"), (QPalette.ToolTipBase, panel),
                         (QPalette.ToolTipText, text)]:
         palette.setColor(role, QColor(color))
     app.setPalette(palette)
@@ -57,13 +57,15 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         QPushButton {{ background: transparent; border: 1px solid {border}; border-radius: 6px;
                        padding: 9px 13px; min-height: 19px; }}
         QPushButton:hover {{ background: {field}; border-color: {selection}; }}
-        QPushButton:pressed, QPushButton:checked {{ background: {selection}; color: white; }}
+        QPushButton:pressed, QPushButton:checked {{ background: {selection}; color: #111111; }}
         QPushButton:disabled {{ color: {muted}; border-color: {border}; }}
         QPushButton:focus, QComboBox:focus, QLineEdit:focus {{ border: 2px solid {selection}; }}
-        QPushButton#primary {{ background: {selection}; color: white; font-weight: 600;
-                               border: 1px solid {selection}; }}
+        QPushButton#primary {{ background: #2768ad; color: white; font-weight: 600;
+                               border: 1px solid #2768ad; }}
+        QPushButton#primary:hover:!disabled {{ background: #2f6db1; }}
+        QPushButton#primary:pressed:!disabled {{ background: #2463a6; }}
         QPushButton#primary:disabled {{ background: {border}; color: {muted}; }}
-        QPushButton#primary[filesLoaded="true"]:disabled {{ background: {selection}; color: #d5e3f5; }}
+        QPushButton#primary[filesLoaded="true"]:disabled {{ background: #2768ad; color: #d5e3f5; }}
         QFrame#panel {{ background: {panel}; border: 1px solid {border}; border-radius: 10px; }}
         QTableView, QListWidget {{ background: {panel}; border: 1px solid {border}; border-radius: 8px;
                                  selection-background-color: {selection}; gridline-color: {border}; }}

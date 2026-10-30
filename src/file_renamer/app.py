@@ -19,10 +19,13 @@ def main() -> int:
     app = QApplication(sys.argv)
     configure_application(app, __version__)
     app.setStyle("Fusion")
-    # Private packaging diagnostic: render the actual bundled GUI in isolated storage and exit.
-    smoke_dir = Path(sys.argv[2]).resolve() if len(sys.argv) == 3 and sys.argv[1] == "--smoke-ui" else None
+    # Diagnostics accept a fresh destination only; never use the real data folder.
+    smoke_mode = sys.argv[1] if len(sys.argv) == 3 and sys.argv[1] in {
+        "--smoke-ui", "--smoke-workflow"
+    } else None
+    smoke_dir = Path(sys.argv[2]).resolve() if smoke_mode else None
     data_dir = smoke_dir or application_data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=smoke_dir is None)
     lock = QLockFile(str(data_dir / "application.lock"))
     lock.setStaleLockTime(0)
     if not lock.tryLock(100):
@@ -36,8 +39,18 @@ def main() -> int:
     window.show()
     if smoke_dir:
         def finish_smoke():
-            window.grab().save(str(smoke_dir / "ui.png"))
-            window.close()
+            try:
+                if smoke_mode == "--smoke-workflow":
+                    from .smoke import run
+                    run(app, window, smoke_dir)
+                else:
+                    assert window.grab().save(str(smoke_dir / "ui.png"))
+            except Exception:
+                import traceback
+                (smoke_dir / "error.txt").write_text(traceback.format_exc(), encoding="utf-8")
+                app.exit(1)
+            else:
+                window.close()
         QTimer.singleShot(300, finish_smoke)
     code = app.exec()
     lock.unlock()

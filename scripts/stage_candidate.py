@@ -1,4 +1,4 @@
-"""Retain exact-commit packages in a private draft. This tool never publishes.
+"""Retain exact-commit packages in an unpublished draft. This tool never publishes.
 
 Adapted from Steady State Studio Contact Sheet Maker's MIT release workflow.
 Only synthetic screenshots, passing test reports and clean tracked source are retained.
@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import tomllib
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -37,7 +38,12 @@ def identity():
     commit = os.environ["GITHUB_SHA"]
     if not re.fullmatch(r"[0-9a-f]{40}", commit) or git("rev-parse", "HEAD") != commit:
         raise ValueError("Candidate must be the exact triggering commit")
-    return commit, git("rev-parse", "HEAD^{tree}"), "v2.0.2"
+    if commit != os.environ.get("REVIEWED_COMMIT"):
+        raise ValueError("The manually reviewed commit must match the workflow commit")
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    if os.environ.get("RELEASE_TAG") != f"v{version}":
+        raise ValueError("Release tag must match the package version")
+    return commit, git("rev-parse", "HEAD^{tree}"), f"v{version}"
 
 
 def validate_draft(release, commit, tag):
@@ -50,6 +56,9 @@ def current_release():
     commit, _, tag = identity()
     release = api(f"repos/{REPOSITORY}/releases/{int(os.environ['RELEASE_ID'])}")
     validate_draft(release, commit, tag)
+    matches = [item for item in release_inventory() if item.get("tag_name") == tag]
+    if len(matches) != 1 or matches[0].get("id") != release.get("id"):
+        raise ValueError("Release tag does not uniquely identify the selected draft")
     return release
 
 
@@ -67,37 +76,90 @@ def write_json(path, data):
     return path
 
 
+def invalidate_ready(release):
+    for asset in release.get("assets", []):
+        if asset.get("name") == "RELEASE-READY.json":
+            try:
+                subprocess.run(["gh", "api", "--method", "DELETE",
+                                f"repos/{REPOSITORY}/releases/assets/{int(asset['id'])}"],
+                               capture_output=True, text=True, check=True)
+            except subprocess.CalledProcessError as exc:
+                # A parallel platform job may already have invalidated this same receipt.
+                if "HTTP 404" not in (exc.stderr or ""):
+                    raise
+
+
 def upload(paths):
     release = current_release()
-    # Never overwrite evidence. A rerun creates identical receipts or must use a fresh commit.
-    existing = {item['name']: item for item in release['assets']}
-    missing = []
     for path in paths:
-        item = record(path)
-        if item['name'] in existing:
-            asset = existing[item['name']]
-            if asset.get('digest') != 'sha256:' + item['sha256'] or asset.get('size') != item['size']:
-                raise ValueError(f"Refusing to replace retained evidence: {path.name}; use a fresh candidate commit")
-        else:
-            missing.append(str(path))
-    if missing:
-        subprocess.run(["gh", "release", "upload", release['tag_name'], "--repo", REPOSITORY, *missing], check=True)
+        record(path)  # Reject missing files and symlinks before invalidating readiness.
+    # Rebuilt archives/QA and run IDs need not be byte-identical. Restaging is permitted
+    # only in the unique, unpublished draft for this exact commit. Any previous ready
+    # receipt is removed first; finalize verifies every replacement before recreating it.
+    invalidate_ready(release)
+    subprocess.run(["gh", "release", "upload", release['tag_name'], "--repo", REPOSITORY,
+                    "--clobber", *(str(path) for path in paths)], check=True)
+
+
+def release_inventory():
+    result = []
+    for page in range(1, 101):
+        batch = api(f"repos/{REPOSITORY}/releases?per_page=100&page={page}")
+        if not isinstance(batch, list) or any(not isinstance(item, dict) for item in batch):
+            raise ValueError("Invalid release inventory")
+        result.extend(batch)
+        if len(batch) < 100:
+            return result
+    raise ValueError("Release inventory pagination exceeded its safety bound")
+
+
+def verify_destination(commit, tag):
+    if api(f"repos/{REPOSITORY}").get("full_name") != REPOSITORY:
+        raise ValueError("Unexpected release repository")
+    if api(f"repos/{REPOSITORY}/commits/{commit}").get("sha") != commit:
+        raise ValueError("Reviewed commit is missing from the release repository")
+    try:
+        obj = api(f"repos/{REPOSITORY}/git/ref/tags/{tag}")["object"]
+    except subprocess.CalledProcessError as exc:
+        if "HTTP 404" in (exc.stderr or ""):
+            return
+        raise
+    for _ in range(10):
+        if obj.get("type") == "commit":
+            if obj.get("sha") != commit:
+                raise ValueError("Existing release tag points to another commit")
+            return
+        if obj.get("type") != "tag" or not re.fullmatch(r"[0-9a-f]{40}", obj.get("sha", "")):
+            break
+        obj = api(f"repos/{REPOSITORY}/git/tags/{obj['sha']}")["object"]
+    raise ValueError("Release tag does not resolve to the reviewed commit")
+
+
+def check_smoke_report(path):
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if (data.get("success") is not True or data.get("rename") != "passed"
+            or data.get("undo") != "passed" or data.get("originals_unchanged") is not True
+            or not data.get("hashes_before") or data["hashes_before"] != data.get("hashes_after")):
+        raise ValueError("Packaged rename and Undo verification is missing or failed")
+    return data
 
 
 def init():
     commit, tree, tag = identity()
-    if api(f"repos/{REPOSITORY}").get('private') is not True:
-        raise ValueError("Candidate staging requires the development repository to remain private")
-    releases = api(f"repos/{REPOSITORY}/releases?per_page=100")
+    verify_destination(commit, tag)
+    releases = release_inventory()
     matching = [release for release in releases if release['tag_name'] == tag]
+    if len(matching) > 1:
+        raise ValueError("Ambiguous release inventory")
     if matching:
         release = matching[0]
         validate_draft(release, commit, tag)
+        invalidate_ready(release)
     else:
         release = api(f"repos/{REPOSITORY}/releases", {
             "tag_name": tag, "target_commitish": commit, "draft": True, "prerelease": True,
-            "name": "File Renamer 2.0.2",
-            "body": "Private draft only. Tests, native package smoke, exact source and license evidence "
+            "name": f"File Renamer {tag[1:]}",
+            "body": "Draft only. Tests, native package smoke, exact source and license evidence "
                     "must pass before publication review. No workflow publishes this release. "
                     "This repository contains a clean audited source snapshot; publication is a separate review.",
         })
@@ -115,14 +177,14 @@ def check_test_report(path):
 
 
 def stage(platform):
-    commit, tree, _ = identity()
+    commit, tree, tag = identity()
     output = ROOT / 'dist/release-stage'
     output.mkdir(parents=True, exist_ok=True)
     tests = None
     if platform in {'Windows', 'Linux'}:
         info = json.loads((ROOT / 'dist/BUILD-INFO.json').read_text())
         if (info['source_commit'] != commit or info['source_tree'] != tree or info['source_dirty']
-                or info['platform'] != platform or info['version'] != '2.0.2'):
+                or info['platform'] != platform or info['version'] != tag[1:]):
             raise ValueError('Package provenance does not match exact clean candidate source')
         from fetch_release_sources import source_index
         expected_qt = source_index()['qt_version']
@@ -134,9 +196,14 @@ def stage(platform):
         files = [ROOT / 'dist' / name for name in names]
         files.append(write_json(output / f'BUILD-INFO-{platform}.json', info))
         tests = check_test_report(ROOT / 'artifacts/tests.xml')
+        smoke_dirs = ['smoke-windows'] if platform == 'Windows' else ['smoke-bundle', 'smoke-appimage', 'smoke-x11']
+        for folder in smoke_dirs:
+            check_smoke_report(ROOT / 'artifacts' / folder / 'result.json')
         qa = output / f'QA-{platform}.zip'
         with zipfile.ZipFile(qa, 'w', zipfile.ZIP_DEFLATED) as archive:
-            for path in [ROOT / 'artifacts/tests.xml', *sorted((ROOT / 'artifacts/screenshots').glob('*.png'))]:
+            for path in [ROOT / 'artifacts/tests.xml', *sorted((ROOT / 'artifacts/screenshots').glob('*.png')),
+                         *sorted((ROOT / 'artifacts').glob('smoke-*/ui*.png')),
+                         *sorted((ROOT / 'artifacts').glob('smoke-*/result.json'))]:
                 if path.is_file() and not path.is_symlink():
                     archive.write(path, path.relative_to(ROOT / 'artifacts').as_posix())
         files.append(qa)
@@ -168,6 +235,7 @@ def stage(platform):
 def finalize():
     commit, tree, tag = identity()
     release = current_release()
+    verify_destination(commit, tag)
     directory = ROOT / 'dist/final'
     directory.mkdir(parents=True, exist_ok=True)
     subprocess.run(['gh', 'release', 'download', tag, '--repo', REPOSITORY, '--dir', str(directory),
@@ -197,7 +265,7 @@ def finalize():
                              'public URLs and download checksums', 'interactive Windows/hardware limits'],
     })
     upload([ready])
-    print('All automated release gates passed. Candidate remains PRIVATE and DRAFT.')
+    print('All automated release gates passed. Candidate remains DRAFT; no publication occurred.')
 
 
 def main():
@@ -206,8 +274,9 @@ def main():
     parser.add_argument('--platform', choices=PLATFORMS)
     args = parser.parse_args()
     if (os.environ.get('GITHUB_REPOSITORY') != REPOSITORY
-            or not os.environ.get('GITHUB_REF', '').startswith('refs/heads/release/public-')):
-        raise ValueError('Staging is restricted to the private release preparation branch')
+            or os.environ.get('GITHUB_REF') != 'refs/heads/main'
+            or os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'):
+        raise ValueError('Staging requires an explicit manual dispatch from the Studio main branch')
     if args.command == 'stage':
         if not args.platform:
             parser.error('stage requires --platform')

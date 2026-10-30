@@ -1,12 +1,19 @@
-name: Stage private release candidate (never publish)
+name: Stage reviewed release candidate (draft only)
 on:
-  push:
-    branches: ['release/public-*']
   workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact reviewed main commit (40 hex characters)
+        required: true
+        type: string
+      tag:
+        description: New tag matching the application version
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
-  group: candidate-${{ github.sha }}
+  group: candidate-${{ inputs.tag }}
   cancel-in-progress: false
 defaults:
   run:
@@ -15,9 +22,11 @@ env:
   PYTHONUTF8: '1'
   PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
   QT_QPA_PLATFORM: offscreen
+  REVIEWED_COMMIT: ${{ inputs.commit }}
+  RELEASE_TAG: ${{ inputs.tag }}
 jobs:
   prepare:
-    if: github.repository == 'steadystatestudio/file-renamer-releases' && startsWith(github.ref, 'refs/heads/release/public-')
+    if: github.repository == 'steadystatestudio/file-renamer-releases' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -75,14 +84,14 @@ jobs:
       - run: python scripts/build.py
       - name: Windows packaged app check
         if: runner.os == 'Windows'
-        run: python scripts/smoke_bundle.py dist/File-Renamer/File-Renamer.exe
+        run: python scripts/smoke_bundle.py dist/File-Renamer/File-Renamer.exe artifacts/smoke-windows
       - name: Linux packaged app checks
         if: runner.os == 'Linux'
         run: |
-          python scripts/smoke_bundle.py dist/File-Renamer/File-Renamer
-          APPIMAGE_EXTRACT_AND_RUN=1 python scripts/smoke_bundle.py dist/File-Renamer-x86_64.AppImage
-          FILE_RENAMER_SMOKE_PLATFORM=xcb APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a python scripts/smoke_bundle.py dist/File-Renamer-x86_64.AppImage
-      - name: Retain successful native packages in private draft
+          python scripts/smoke_bundle.py dist/File-Renamer/File-Renamer artifacts/smoke-bundle
+          APPIMAGE_EXTRACT_AND_RUN=1 python scripts/smoke_bundle.py dist/File-Renamer-x86_64.AppImage artifacts/smoke-appimage
+          FILE_RENAMER_SMOKE_PLATFORM=xcb APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a python scripts/smoke_bundle.py dist/File-Renamer-x86_64.AppImage artifacts/smoke-x11
+      - name: Retain successful native packages in draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/stage_candidate.py stage --platform '${{ matrix.platform }}'

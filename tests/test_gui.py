@@ -632,8 +632,6 @@ def test_state_square_center_keyboard_and_lock(app, window, make_entry):
     from PySide6.QtCore import QRectF
     from PySide6.QtWidgets import QStyleOptionViewItem
 
-    from file_renamer.gui import proposed_name_color
-
     window.add_paths([make_entry("toggle.txt").path])
     wait_until(app, lambda: window.model.plan is not None)
     index = window.model.index(0, 0)
@@ -646,7 +644,7 @@ def test_state_square_center_keyboard_and_lock(app, window, make_entry):
     pixels = window.table.viewport().grab().toImage()
     ratio = pixels.devicePixelRatio()
     assert pixels.pixelColor(round(square.center().x() * ratio),
-                             round((square.top() + 3) * ratio)).rgba() == proposed_name_color().rgba()
+                             round((square.top() + 3) * ratio)).rgba() == option.palette.highlight().color().rgba()
     window.table.setCurrentIndex(index)
     window.table.setFocus()
     QTest.keyClick(window.table, Qt.Key_Space)

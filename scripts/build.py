@@ -11,6 +11,7 @@ import sys
 import sysconfig
 from pathlib import Path
 
+from build_environment import pyinstaller_environment
 from build_manifest import write_bundle_info, write_manifest
 from fetch_appimagetool import SHA256, SIZE, verify_file
 from fetch_appimagetool import main as fetch_appimage_inputs
@@ -55,7 +56,7 @@ def main() -> int:
     for target in (build, ROOT / "dist"):
         if not target.resolve().is_relative_to(ROOT):
             raise RuntimeError("Build output escaped the project")
-    subprocess.run(command, check=True)
+    subprocess.run(command, check=True, env=pyinstaller_environment())
     bundle = ROOT / "dist/File-Renamer"
     shutil.copy2(ROOT / "README.md", bundle / "README.md")
     shutil.copy2(ROOT / "LICENSE", bundle / "LICENSE.txt")

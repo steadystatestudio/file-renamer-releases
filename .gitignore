@@ -8,3 +8,4 @@ dist/
 artifacts/
 .wsl/
 src/file_renamer/assets/tools/
+.venv-release/

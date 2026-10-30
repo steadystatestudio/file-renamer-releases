@@ -1,4 +1,4 @@
-"""Check the packaged executable's actual preview subprocess, without installed Python imports."""
+"""Check packaged preview helpers and a synthetic GUI rename/Undo workflow."""
 
 from __future__ import annotations
 
@@ -72,12 +72,25 @@ def main():
         assert row["destination"].endswith("2_png_picture.png") and not row["error"], response
         environment = dict(os.environ, QT_QPA_PLATFORM=os.environ.get("FILE_RENAMER_SMOKE_PLATFORM", "offscreen"))
         result = subprocess.run(
-            [str(executable), "--smoke-ui", str(root / "ui-check")], timeout=30, cwd=root, env=environment, **options
+            [str(executable), "--smoke-workflow", str(root / "ui-check")],
+            timeout=120, cwd=root, env=environment, **options
         )
-        assert result.returncode == 0, result.returncode
+        if result.returncode != 0:
+            error = root / "ui-check/error.txt"
+            raise RuntimeError(error.read_text(encoding="utf-8") if error.exists()
+                               else f"Packaged GUI stopped with exit code {result.returncode}")
         assert (root / "ui-check/ui.png").stat().st_size > 1000
+        receipt = json.loads((root / "ui-check/result.json").read_text(encoding="utf-8"))
+        assert receipt["success"] and receipt["rename"] == receipt["undo"] == "passed"
+        assert receipt["hashes_before"] == receipt["hashes_after"] and receipt["originals_unchanged"]
         assert not (root / "ui-check/application.lock").exists()
-    print("Packaged GUI and preview worker passed; source file unchanged.")
+        if len(sys.argv) > 2:
+            import shutil
+            evidence = Path(sys.argv[2]).resolve()
+            evidence.mkdir(parents=True, exist_ok=False)
+            for name in ("ui.png", "ui-preview.png", "result.json"):
+                shutil.copy2(root / "ui-check" / name, evidence / name)
+    print("Packaged GUI, preview helpers, rename and Undo passed; original names and contents restored.")
 
 
 if __name__ == "__main__":

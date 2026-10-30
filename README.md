@@ -2,10 +2,20 @@
 
 **Preview every filename. Rename a batch. Undo when needed.**
 
-A local desktop utility for Windows and Linux, built as a visual sibling to
-Square Photo Padder.
-Large rounded controls, system light/dark appearance, a resizable window, and a
-single preview-first workflow keep common batch jobs approachable.
+Rename photo batches, downloads and documents without editing each filename by hand.
+For example, add a prefix to turn `photo_01.jpg` into `listing_photo_01.jpg`, review the
+whole batch, then rename it. Undo restores the last batch, including after a restart.
+
+**Free for Windows and Linux.** All features work offline. No account, upload,
+subscription or telemetry. Optional donations never unlock features.
+
+[Windows and Linux downloads](https://github.com/steadystatestudio/file-renamer-releases/releases)
+· [Report a problem](https://github.com/steadystatestudio/file-renamer-releases/issues)
+· [Donate on Ko-fi](https://ko-fi.com/steadystatestudio)
+
+Choose the Windows ZIP or Linux AppImage listed in the release notes. The large
+Qt/PySide source archives are for developers and license compliance, not installation.
+Packages are unsigned; verify the published checksum and follow your normal security policy.
 
 ![File Renamer dark interface](docs/screenshot.png)
 
@@ -229,7 +239,7 @@ python scripts/build.py
 Build on the target OS. Windows produces a portable ZIP. Linux downloads verified
 [appimagetool](https://github.com/AppImage/appimagetool) 1.9.1 and type2 runtime
 20251108. An `APPIMAGETOOL` override must match the same checksum. The workflow verifies the packaging inputs, builds
-both platforms, tests packaged preview workers, and uploads build artifacts.
+both platforms, tests packaged preview workers and the real GUI rename/Undo workflow.
 It does not publish releases. Windows binaries are unsigned. Verify checksums and follow your normal security
 policy; do not disable protection to run this app.
 
@@ -237,7 +247,7 @@ Testing builds also produce a Linux `File-Renamer-linux-x86_64.tar.gz` portable
 bundle. Extract it and run `File-Renamer/File-Renamer` when AppImage/FUSE is
 unavailable. `dist/BUILD-INFO.json` records the source commit, tree and installed
 dependency versions; `dist/SHA256SUMS` identifies the exact testing archives.
-The private candidate workflow retains passing packages, checksums, synthetic
+The manually dispatched candidate workflow retains passing packages, checksums, synthetic
 screenshots, JUnit results and matching library sources in a draft release.
 It never publishes; see [release preparation](docs/RELEASE-CANDIDATE.md).
 
