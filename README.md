@@ -11,7 +11,7 @@ single preview-first workflow keep common batch jobs approachable.
 
 ## Run
 
-[App details](https://steady-state-studio.rpxjjnqmguarhzkg.chatgpt.site/apps/file-renamer/) ·
+[App details](https://steady-state-studio.steadystatestudio1.workers.dev/apps/file-renamer/) ·
 [Release downloads and checksums](https://github.com/steadystatestudio/file-renamer-releases/releases) ·
 [Report a problem](https://github.com/steadystatestudio/file-renamer-releases/issues)
 
