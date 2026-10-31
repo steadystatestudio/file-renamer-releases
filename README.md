@@ -9,7 +9,8 @@ whole batch, then rename it. Undo restores the last batch, including after a res
 **Free for Windows and Linux.** All features work offline. No account, upload,
 subscription or telemetry. Optional donations never unlock features.
 
-[Windows and Linux downloads](https://github.com/steadystatestudio/file-renamer-releases/releases)
+[App details](https://steady-state-studio.steadystatestudio1.workers.dev/apps/file-renamer/)
+· [Windows and Linux downloads](https://github.com/steadystatestudio/file-renamer-releases/releases)
 · [Report a problem](https://github.com/steadystatestudio/file-renamer-releases/issues)
 · [Donate on Ko-fi](https://ko-fi.com/steadystatestudio)
 
@@ -21,7 +22,6 @@ Packages are unsigned; verify the published checksum and follow your normal secu
 
 ## Run
 
-[App details](https://steady-state-studio.steadystatestudio1.workers.dev/apps/file-renamer/) ·
 [Release downloads and checksums](https://github.com/steadystatestudio/file-renamer-releases/releases) ·
 [Report a problem](https://github.com/steadystatestudio/file-renamer-releases/issues)
 
