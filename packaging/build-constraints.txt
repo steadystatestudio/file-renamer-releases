@@ -1,0 +1,5 @@
+# Match the runtime and packaging tools validated for the 1.0 desktop builds.
+PySide6==6.11.0
+PyInstaller==6.22.2
+pyinstaller-hooks-contrib==2026.7
+tomli-w==1.2.0

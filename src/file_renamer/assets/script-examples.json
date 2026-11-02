@@ -1,0 +1,8 @@
+{
+  "Add a prefix": "begin\n  FileName := 'Example ' + FileName;\nend.",
+  "Index names": "begin\n  FileName := FormatFloat('000', GetCurrentMarkedFileIndex) + ' ' + FileName;\nend.",
+  "Use modified date": "begin\n  FileName := FormatDateTime('yyyy-mm-dd', FileTimeModified(FilePath)) + ' ' + FileName;\nend.",
+  "Use image metadata": "var Value: WideString;\nbegin\n  Value := CalculateMetaTag(FilePath, 'EXIF_Model');\n  if Value <> '' then FileName := Value + ' ' + FileName;\nend.",
+  "Change extension": "begin\n  FileName := WideChangeFileExt(FileName, '.txt');\nend.",
+  "Rearrange underscore parts": "var Parts: TWideStringArray;\nbegin\n  Parts := WideSplitString(WideExtractBaseName(FileName), '_');\n  if Length(Parts) = 2 then FileName := Parts[1] + '_' + Parts[0] + WideExtractFileExt(FileName);\nend."
+}
