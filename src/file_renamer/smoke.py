@@ -124,10 +124,35 @@ def run(app, window, root: Path) -> None:
     assert window.manager.load()["status"] == "undone"
     assert not list(inputs.glob(".file-renamer-*.tmp"))
     assert window.grab().save(str(root / "ui.png"))
+    # The exact frozen application must also preserve apostrophes through its
+    # real Case editor, preview worker, filesystem operation and recovery path.
+    window._clear()
+    window.rules = []
+    window._fill_rules()
+    case_inputs = root / "case-inputs"
+    case_inputs.mkdir()
+    case_names = {"it's alice’s file.txt": "It's Alice’s File.txt", "don't stop.txt": "Don't Stop.txt"}
+    for name in case_names:
+        (case_inputs / name).write_bytes(b"apostrophe regression input")
+    rule_dialog("Add Rule", "case", {}, "Add Rule")
+    window.add_paths([str(case_inputs / name) for name in case_names])
+    drain(lambda: not window.busy and window.model.plan is not None)
+    assert window.rename.isEnabled(), window.progress.text()
+    for row in window.model.plan.files:
+        assert Path(row.destination).name == case_names[Path(row.entry.path).name]
+    window.rename.click()
+    drain(lambda: not window.busy)
+    for name in case_names.values():
+        assert (case_inputs / name).read_bytes() == b"apostrophe regression input"
+    window.undo.click()
+    drain(lambda: not window.busy)
+    assert set(path.name for path in case_inputs.iterdir()) == set(case_names)
+    assert all(path.read_bytes() == b"apostrophe regression input" for path in case_inputs.iterdir())
     (root / "result.json").write_text(json.dumps({
         "success": True, "files": len(originals), "preview": "passed",
         "rename": "passed", "undo": "passed", "originals_unchanged": True,
         "rule_creation": "passed", "rule_editing": "passed", "created_rule_kinds": ["insert", "replace"],
         "tiff_metadata": "passed", "tiff_original_unchanged": after["photo_10.tif"] == before["photo_10.tif"],
         "hashes_before": before, "hashes_after": after,
+        "case_apostrophes_preview_rename_undo": "passed",
     }, indent=2) + "\n", encoding="utf-8")

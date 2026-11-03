@@ -10,6 +10,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from .case_rules import title_case
 from .date_formats import reformat
 from .registry import effective_options, ranges
 
@@ -343,7 +344,7 @@ def apply(name, rule, context):
         base = value if o["preserve"] else value.lower()
         mode = o["mode"]
         if mode == "title":
-            value = re.sub(r"\b\w", lambda m: m[0].upper(), base)
+            value = title_case(value, preserve=o["preserve"])
         elif mode == "first":
             value = base[:1].upper() + base[1:]
         elif mode == "sentence":

@@ -218,6 +218,9 @@ class ChoiceGroup(QWidget):
         self.reflow(max(1, self.width()))
 
     def reflow(self, width):
+        for widgets in self.row_widgets:
+            for widget in widgets:
+                widget.ensurePolished()
         columns = 1 if self.vertical else 2
         needed = sum(max((widgets[0].sizeHint().width() for widgets in self.row_widgets[offset::2]),
                          default=0) for offset in (0, 1)) + 12
@@ -241,7 +244,10 @@ class ChoiceGroup(QWidget):
                 column += 1
                 used += needed + row.spacing()
             row.setColumnStretch(column, 1)
+            row.invalidate()
             grid.addLayout(row, index // columns, index % columns)
+        grid.invalidate()
+        self.updateGeometry()
 
 
 
@@ -285,9 +291,6 @@ class RuleDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Edit rule" if rule else "Add a rule")
         self.setObjectName("ruleDialog")
-        font = self.font()
-        font.setPointSizeF(12)
-        self.setFont(font)
         self.result_rule = rule
         self.widgets = {}
         self.inline_widgets = set()
@@ -295,9 +298,6 @@ class RuleDialog(QDialog):
         layout = QVBoxLayout(self)
         panes = QHBoxLayout()
         self.kind = RuleTypeList()
-        font = self.kind.font()
-        font.setPointSizeF(12)
-        self.kind.setFont(font)
         self.kind.setAccessibleName("Rule type")
         self.kind.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         for key in RULE_ORDER:
@@ -338,7 +338,7 @@ class RuleDialog(QDialog):
         scroll = QScrollArea()
         self.editor_scroll = scroll
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
         scroll.setWidget(definitions)
         panes.addWidget(scroll, 2)
@@ -385,6 +385,9 @@ class RuleDialog(QDialog):
         self._fit_dialog()
 
     def _fit_dialog(self):
+        self.ensurePolished()
+        for widget in self.findChildren(QWidget):
+            widget.ensurePolished()
         available = self.screen().availableGeometry()
         max_width, max_height = max(320, available.width() - 40), max(240, available.height() - 80)
         margins = self.layout().contentsMargins()
@@ -416,12 +419,24 @@ class RuleDialog(QDialog):
         self._reflow_choices(editor_width - 24 - scroll_width)
         definition_layout = self.definitions.layout()
         definition_layout.invalidate()
-        editor_height = max(definition_layout.minimumSize().height(),
-                            definition_layout.totalHeightForWidth(editor_width))
+        editor_height = max(self.definitions.minimumSizeHint().height(),
+                            self.definitions.heightForWidth(editor_width - scroll_width))
         height = min(max_height, max(list_height, editor_height + 4) + overhead)
         self.setMinimumSize(min(width, max_width), min(360, height))
         self.resize(width, height)
         self.definitions.setMinimumHeight(editor_height)
+        QTimer.singleShot(0, self, self._fit_editor_height)
+
+    def _fit_editor_height(self):
+        # Qt resolves a form's wrapping and style margins after assigning its
+        # final width. Keep that width and measure the resulting content height.
+        width = self.editor_scroll.viewport().width()
+        needed = max(self.definitions.minimumSizeHint().height(), self.definitions.heightForWidth(width))
+        self.definitions.setMinimumHeight(needed)
+        missing = needed - self.editor_scroll.viewport().height()
+        if missing > 0:
+            maximum = max(240, self.screen().availableGeometry().height() - 80)
+            self.resize(self.width(), min(maximum, self.height() + missing + 4))
 
     def _reflow_choices(self, width):
         for widget in (self.target, *self.widgets.values()):

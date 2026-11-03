@@ -31,6 +31,7 @@ def test_source_smoke_renames_and_restores_synthetic_files(tmp_path):
     assert receipt["created_rule_kinds"] == ["insert", "replace"]
     assert receipt["tiff_metadata"] == "passed" and receipt["tiff_original_unchanged"]
     assert receipt["hashes_before"] == receipt["hashes_after"]
+    assert receipt["case_apostrophes_preview_rename_undo"] == "passed"
     assert not (root / "application.lock").exists()
 
 

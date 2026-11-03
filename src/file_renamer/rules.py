@@ -6,6 +6,7 @@ import re
 import string
 import unicodedata
 
+from .case_rules import title_case
 from .filename_policy import repair_filename
 from .models import RuleSpec
 from .registry import REGISTRY
@@ -194,7 +195,7 @@ def apply_rule(name: str, rule: RuleSpec, index: int, context=None) -> str:
                 count = count if occurrence == "legacy" else 0 if occurrence == "all" else 1
                 value = re.sub(re.escape(pattern), lambda _: replacement, value, count=count, flags=flags)
     elif kind == "case":
-        value = {"lower": str.lower, "upper": str.upper, "title": str.title,
+        value = {"lower": str.lower, "upper": str.upper, "title": lambda text: title_case(text, legacy=True),
                  "sentence": str.capitalize, "swap": str.swapcase}[options["mode"]](value)
     elif kind == "number":
         number = str(options["start"] + index * options["step"]).zfill(options["width"])

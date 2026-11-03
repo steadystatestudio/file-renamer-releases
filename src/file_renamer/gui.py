@@ -116,14 +116,15 @@ class ActionRow(QWidget):
         return max(112, self.rename.sizeHint().width(), self.undo.sizeHint().width())
 
     def row_height(self):
-        return max(48, self.controls.sizeHint().height(),
-                   self.rename.sizeHint().height(), self.undo.sizeHint().height())
+        return max(48, self.rename.sizeHint().height(), self.undo.sizeHint().height())
 
     def spacious_width(self):
         return 2 * max(self.controls.sizeHint().width(), self.action_width()) + self.action_width() + 24
 
     def height_for_width(self, width):
-        return self.row_height() if width >= self.spacious_width() else self.row_height() * 2 + 8
+        if width >= self.spacious_width():
+            return max(self.controls.sizeHint().height(), self.row_height())
+        return self.controls.sizeHint().height() + self.row_height() + 8
 
     def sizeHint(self):
         return QSize(self.spacious_width(), self.row_height())
@@ -142,8 +143,11 @@ class ActionRow(QWidget):
     def arrange(self):
         width = self.action_width()
         height = self.row_height()
-        action_y = 0 if self.width() >= self.spacious_width() else height + 8
-        self.controls.setGeometry(0, 0, self.controls.sizeHint().width(), height)
+        control_height = self.controls.sizeHint().height()
+        spacious = self.width() >= self.spacious_width()
+        action_y = (self.height() - height) // 2 if spacious else control_height + 8
+        control_y = (self.height() - control_height) // 2 if spacious else 0
+        self.controls.setGeometry(0, control_y, self.controls.sizeHint().width(), control_height)
         self.rename.setGeometry((self.width() - width) // 2, action_y, width, height)
         self.undo.setGeometry(self.width() - width, action_y, width, height)
 
@@ -614,7 +618,7 @@ class MainWindow(QMainWindow):
         panel_layout = QVBoxLayout(panel)
         action_left = QWidget()
         self.rule_controls = action_left
-        preset_row = QHBoxLayout(action_left)
+        preset_row = QGridLayout(action_left)
         preset_row.setContentsMargins(0, 0, 0, 0)
         preset_row.setSpacing(5)
         self.collapse_rules = QPushButton("Rules")
@@ -623,7 +627,7 @@ class MainWindow(QMainWindow):
         self.collapse_rules.clicked.connect(self._toggle_rules_panel)
         self.collapse_rules.setToolTip("Collapse or expand Rules")
         self.collapse_rules.setAccessibleName("Collapse or expand Rules")
-        preset_row.addWidget(self.collapse_rules)
+        preset_row.addWidget(self.collapse_rules, 0, 0)
         self.preset_more = self._button("Preset", self._preset_menu, "Load, save, import, export or delete presets")
         self.preset_more.setAccessibleName("Preset menu")
         self.rule_body = QWidget()
@@ -664,11 +668,10 @@ class MainWindow(QMainWindow):
             if label in {"↑", "↓"}:
                 button.setAccessibleName("Move rule up" if label == "↑" else "Move rule down")
             button.setToolTip(button.accessibleName() or label)
-            preset_row.addWidget(button)
+            preset_row.addWidget(button, 0, len(self.rule_buttons) + 1)
             self.rule_buttons.append(button)
         self.rule_buttons[0].setAccessibleName("Add Rule")
-        preset_row.addWidget(self.preset_more)
-        preset_row.addStretch()
+        preset_row.addWidget(self.preset_more, 0, len(self.rule_buttons) + 1)
         self.undo = self._button("UNDO", self._restore, "Undo last rename · Ctrl+Shift+Z")
         self.rename = self._button("RENAME", self._rename, "Rename files · F6")
         self.rename.setObjectName("primary")
@@ -760,14 +763,61 @@ class MainWindow(QMainWindow):
         self.progress.set_message(message)
 
     def _update_layout_constraints(self):
+        margins = self.content_root.layout().contentsMargins()
+        screen = self.screen().availableGeometry()
+        available_width = max(240, min(self.width(), screen.width() - 20) - margins.left() - margins.right())
+        # Larger desktop fonts can make a single row wider than the display.
+        # Wrap whole controls instead of shrinking labels or extending offscreen.
+        controls = [self.collapse_rules, *self.rule_buttons, self.preset_more]
+        grid = self.rule_controls.layout()
+        placements, row, column, used = [], 0, 0, 0
+        for control in controls:
+            needed = control.sizeHint().width()
+            if column and used + needed > available_width:
+                row, column, used = row + 1, 0, 0
+            placements.append((row, column))
+            used += needed + grid.spacing()
+            column += 1
+        placement_key = tuple(placements)
+        if getattr(self, "_rule_placements", None) != placement_key:
+            for control in controls:
+                grid.removeWidget(control)
+                for old_row in getattr(self, "_rule_rows", []):
+                    old_row.removeWidget(control)
+            for old_row in getattr(self, "_rule_rows", []):
+                grid.removeItem(old_row)
+                old_row.deleteLater()
+            rows = [QHBoxLayout() for _ in range(placements[-1][0] + 1)]
+            for row_number, row_layout in enumerate(rows):
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(grid.spacing())
+                grid.addLayout(row_layout, row_number, 0)
+            for control, (row, column) in zip(controls, placements):
+                rows[row].addWidget(control)
+            for row_layout in rows:
+                row_layout.addStretch()
+            self._rule_rows = rows
+            self._rule_placements = placement_key
         self.rule_controls.layout().invalidate()
         side_width = max(self.toolbar_left.sizeHint().width(), self.toolbar_right.sizeHint().width())
-        self.toolbar_layout.setColumnMinimumWidth(0, side_width)
-        self.toolbar_layout.setColumnMinimumWidth(2, side_width)
+        compact_toolbar = side_width * 2 + self.preset_label.minimumSizeHint().width() + 20 > available_width
+        if getattr(self, "_compact_toolbar", None) != compact_toolbar:
+            for control in (self.toolbar_left, self.toolbar_right, self.preset_label):
+                self.toolbar_layout.removeWidget(control)
+            if compact_toolbar:
+                self.toolbar_layout.addWidget(self.toolbar_left, 0, 0, 1, 3, Qt.AlignLeft)
+                self.toolbar_layout.addWidget(self.toolbar_right, 1, 0, 1, 3, Qt.AlignRight)
+                self.toolbar_layout.addWidget(self.preset_label, 2, 0, 1, 3)
+            else:
+                self.toolbar_layout.addWidget(self.toolbar_left, 0, 0, Qt.AlignLeft)
+                self.toolbar_layout.addWidget(self.toolbar_right, 0, 2, Qt.AlignRight)
+                self.toolbar_layout.addWidget(self.preset_label, 0, 1)
+            self._compact_toolbar = compact_toolbar
+        self.toolbar_layout.setColumnMinimumWidth(0, 0 if compact_toolbar else side_width)
+        self.toolbar_layout.setColumnMinimumWidth(2, 0 if compact_toolbar else side_width)
         hint = self.action_row.minimumSizeHint()
         self.action_row.setMinimumWidth(hint.width())
         root = self.content_root
-        margins = root.layout().contentsMargins()
         available_width = max(hint.width(), self.width() - margins.left() - margins.right())
         self.action_row.setFixedHeight(self.action_row.height_for_width(available_width))
         required = (
@@ -782,6 +832,8 @@ class MainWindow(QMainWindow):
         if not self.isMaximized() and not self.isMinimized() and self.width() < self.minimumWidth():
             self.resize(self.minimumWidth(), self.height())
         self._fit_window_to_screen()
+        self.centralWidget().layout().activate()
+        root.layout().activate()
         self.action_row.arrange()
         self.rule_list.fit_columns()
 

@@ -16,6 +16,12 @@ The extension is the final suffix: `archive.tar.gz` has extension `gz`.
 Regular Expressions uses native Unicode TRegExpr syntax, with `$1`, `$2`, and
 `$0` for captured groups and the whole match.
 
+Case's **Capitalize Every Word** keeps straight and curly apostrophes inside a
+word: `IT'S ALICE’S FILE` becomes `It's Alice’s File`. Opening and closing quotes
+still separate words. **Preserve case** keeps the remaining letters as supplied;
+forced-case fragments and extension options apply as before. This apostrophe
+correction also applies to title case in saved legacy rules.
+
 Version-1 presets retain their original options and behavior, including
 zero-based positions, Python regular expressions, and Latin accent removal.
 Their editors show **Legacy**. Version-2 preset backups record behavior for each

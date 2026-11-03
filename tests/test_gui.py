@@ -75,6 +75,29 @@ def test_preview_rename_undo(app, window, make_entry):
     assert window.model.results[entry.path] == "Restored"
 
 
+def test_case_apostrophes_preview_rename_and_undo(app, window, make_entry):
+    originals = {"it's alice’s file.txt": b"straight and curly apostrophes", "don't stop.txt": b"contraction"}
+    entries = [make_entry(name, content) for name, content in originals.items()]
+    dialog = RuleDialog(window)
+    dialog.kind.setCurrentRow(next(index for index in range(dialog.kind.count())
+                                   if dialog.kind.item(index).data(Qt.UserRole) == "case"))
+    dialog._accept()
+    window.rules = [dialog.result_rule]
+    window._fill_rules()
+    window.add_paths([entry.path for entry in entries])
+    wait_until(app, lambda: window.model.plan is not None)
+    expected = ["It's Alice’s File.txt", "Don't Stop.txt"]
+    assert [Path(item.destination).name for item in window.model.plan.files] == expected
+    window.rename.click()
+    wait_until(app, lambda: not window.busy)
+    for entry, name in zip(entries, expected):
+        assert Path(entry.path).with_name(name).read_bytes() == originals[Path(entry.path).name]
+    window.undo.click()
+    wait_until(app, lambda: not window.busy)
+    for entry in entries:
+        assert Path(entry.path).read_bytes() == originals[Path(entry.path).name]
+
+
 def test_collision_and_exclusion(app, window, make_entry):
     a, b = make_entry("a.txt"), make_entry("b.txt")
     window.rules = [RuleSpec("replace", options={"find": "a", "replacement": "b"})]
@@ -699,10 +722,10 @@ def test_dialog_fits_labels_categories_and_screen(app, window, monkeypatch):
         assert dialog.width() <= 1880
         assert dialog.height() <= 1120
         wait_until(app, lambda: dialog.editor_scroll.verticalScrollBar().maximum() == 0)
-    screen.availableGeometry = lambda: QRect(0, 0, 800, 500)
+    screen.availableGeometry = lambda: QRect(0, 0, 800, 400)
     dialog._fit_dialog()
     app.processEvents()
-    assert dialog.height() <= 420
+    assert dialog.height() <= 320
     assert dialog.kind.verticalScrollBar().maximum() > 0
     assert dialog.width() <= 760
     dialog.close()
@@ -725,12 +748,11 @@ def test_window_minimum_preserves_all_buttons_on_narrow_screens(app, window, mon
     for button in [window.collapse_rules, *window.rule_buttons, window.preset_more]:
         assert button.width() >= button.sizeHint().width()
         assert button.mapTo(window.rule_controls, button.rect().topRight()).x() < window.rule_controls.width()
-    required = window.content_root.minimumWidth()
     stylesheet = window.styleSheet()
     window.setStyleSheet(stylesheet + "\nQPushButton { font-size: 16pt; }")
     app.processEvents()
     window._update_layout_constraints()
-    assert window.content_root.minimumWidth() > required
+    assert window.content_root.minimumWidth() < screen.availableGeometry().width()
     for button in window.rule_buttons:
         assert button.width() >= button.sizeHint().width()
     window.setStyleSheet(stylesheet)
@@ -746,6 +768,51 @@ def test_window_minimum_preserves_all_buttons_on_narrow_screens(app, window, mon
         assert button.mapTo(window.rule_controls, button.rect().topRight()).x() < window.rule_controls.width()
     assert window.undo.mapTo(window, window.undo.rect().topRight()).x() < window.width()
     assert window.progress.width() <= window.width() - 32
+
+
+def test_system_font_survives_themes_and_large_text_reflows(app, window, monkeypatch):
+    from types import SimpleNamespace
+
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QFont
+
+    from file_renamer.themes import apply_theme
+
+    original = QFont(app.font())
+    enlarged = QFont(original)
+    enlarged.setPointSizeF(18)
+    area = QRect(0, 0, 1024, 900)
+    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: area))
+    try:
+        app.setFont(enlarged)
+        window.resize(990, 820)
+        for theme in ("dark", "light", "system"):
+            apply_theme(app, theme)
+            app.processEvents()
+            window._update_layout_constraints()
+            app.processEvents()
+            assert app.font().family() == enlarged.family()
+            assert app.font().pointSizeF() == 18
+            assert area.contains(window.frameGeometry())
+            for control in (window.add_files, window.settings_button, *window.rule_buttons,
+                            window.rename, window.undo, window.progress, window.table,
+                            window.table.horizontalHeader(), window.rule_list.horizontalHeader()):
+                assert control.font().pointSizeF() == 18
+                assert window.rect().contains(QRect(control.mapTo(window, QPoint()), control.size()))
+            dialog = RuleDialog(window)
+            assert dialog.font().pointSizeF() == 18
+            assert dialog.kind.font().pointSizeF() == 18
+            dialog.kind.setCurrentRow(next(index for index in range(dialog.kind.count())
+                                           if dialog.kind.item(index).data(Qt.UserRole) == "case"))
+            dialog.setAttribute(Qt.WA_DontShowOnScreen)
+            dialog.show()
+            app.processEvents()
+            for choice in dialog.widgets["mode"].group.buttons():
+                assert choice.height() >= choice.fontMetrics().height()
+            dialog.close()
+    finally:
+        app.setFont(original)
+        apply_theme(app)
 
 
 @pytest.mark.parametrize("work_area", [(65, 32, 959, 704), (0, 0, 800, 600)])

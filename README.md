@@ -74,6 +74,11 @@ python -m file_renamer
 After renaming, the app pauses the preview so insertion/numbering rules do not
 immediately suggest another pass. Change a rule or press **F5** to begin another preview.
 
+The interface follows your operating system's font and text size. Reopen File
+Renamer after changing desktop font settings. Larger text can wrap command rows
+or add scrolling to rule forms; Light, Dark and System appearance keep the same
+text size.
+
 Right-click the table to include, exclude, or remove selected files. Click column
 headings to sort. Numbering follows the displayed order of included files.
 Folder scans include only immediate files by default; enable subfolder scanning

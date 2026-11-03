@@ -1,5 +1,18 @@
 # Changes
 
+## 2.0.8
+
+- Follow the operating system's interface font and text size, including Cinnamon,
+  GNOME and MATE settings in Linux packages. Reopen the app after changing desktop
+  font settings. Changing the app's appearance no longer resets the font.
+- Keep rule editors, tables and status text at the system size. Reflow commands
+  and scroll rule forms when larger text needs more room.
+- Treat straight and curly apostrophes inside words as part of the word in Case
+  title mode: `It's` stays `It's`, and `DON’T` becomes `Don’t`. Preserve forced
+  fragments, extension options and saved legacy preset behavior.
+- Verify apostrophe handling through the packaged Case editor, preview, Rename
+  and Undo workflow, including original filename and content restoration.
+
 ## 2.0.7
 
 - Remove the affiliation statement from the README and Help dialog.

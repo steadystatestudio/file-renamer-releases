@@ -5,11 +5,20 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QFontDatabase, QPalette
+from PySide6.QtGui import QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication
+
+from .system_fonts import apply_system_font, system_font_css
 
 
 def apply_theme(app: QApplication, preference: str = "system") -> None:
+    apply_system_font(app)
+    # Qt's offscreen Windows plugin may enumerate no fonts. Register an installed
+    # desktop font for QA rendering without replacing the desktop font settings.
+    if app.platformName() == "offscreen" and os.name == "nt" and not QFontDatabase.families():
+        font_file = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts/segoeui.ttf"
+        if font_file.is_file():
+            QFontDatabase.addApplicationFont(str(font_file))
     dark = app.styleHints().colorScheme() == Qt.ColorScheme.Dark
     if preference == "system" and os.name == "nt":
         try:
@@ -25,21 +34,6 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
     text, muted, border = ("#f1f1f1", "#b5b5b5", "#555555") if dark else ("#222222", "#626262", "#cccccc")
     selection = "#508fdb"
     app.setProperty("dark", dark)
-    preferred = ("Segoe UI", "Noto Sans", "DejaVu Sans", "Liberation Sans")
-    available = QFontDatabase.families()
-    if not any(name in available for name in preferred):
-        # Offscreen Qt and some bundled Linux setups do not enumerate system fonts.
-        candidates = [Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts/segoeui.ttf"] if os.name == "nt" else [
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-            Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"),
-        ]
-        for path in candidates:
-            if path.exists() and QFontDatabase.addApplicationFont(str(path)) >= 0:
-                break
-        available = QFontDatabase.families()
-    font = QFont(next((name for name in preferred if name in available), app.font().family()))
-    font.setPointSizeF(10.5)
-    app.setFont(font)
     palette = QPalette()
     from PySide6.QtGui import QColor
     for role, color in [(QPalette.Window, background), (QPalette.WindowText, text),
@@ -52,7 +46,7 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         palette.setColor(role, QColor(color))
     app.setPalette(palette)
     app.setStyleSheet(f"""
-        QWidget {{ color: {text}; }}
+        QWidget {{ color: {text}; {system_font_css(app)} }}
         QMainWindow, QDialog {{ background: {background}; }}
         QPushButton {{ background: transparent; border: 1px solid {border}; border-radius: 6px;
                        padding: 9px 13px; min-height: 19px; }}
@@ -85,10 +79,10 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         QDialog#ruleDialog QListWidget::item {{ padding: 2px 6px; }}
         QDialog#ruleDialog QLabel#sectionHeading {{ padding-top: 3px; }}
         QLabel#muted {{ color: {muted}; }}
-        QLabel#heading {{ font-size: 15pt; font-weight: 600; }}
+        QLabel#heading {{ font-weight: 600; }}
         QLabel#sectionHeading {{ font-weight: 600; padding-top: 8px; }}
         QProgressBar {{ border: none; border-radius: 6px; background: {panel};
                        text-align: center; min-height: 36px; padding: 10px 32px;
-                       font-size: 11.6pt; font-weight: 600; }}
+                       font-weight: 600; }}
         QToolTip {{ background: {panel}; color: {text}; border: 1px solid {border}; padding: 6px; }}
     """)
