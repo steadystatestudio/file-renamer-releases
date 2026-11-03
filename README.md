@@ -287,3 +287,5 @@ always appreciated. The **Donate** button in the app opens the same page in your
 
 [MIT](LICENSE), Copyright (c) 2026 Steady State Studio.
 See [third-party notices](THIRD_PARTY_NOTICES.md) for bundled dependencies.
+
+File Renamer is an independent project and is not affiliated with or endorsed by den4b or ReNamer.

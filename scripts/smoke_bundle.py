@@ -28,7 +28,11 @@ def image_fixture() -> bytes:
 
 
 def main():
+    from package_documentation import verify_documentation
+
     executable = Path(sys.argv[1]).resolve()
+    if executable.suffix.lower() != ".appimage":
+        verify_documentation(executable.parent, Path(__file__).resolve().parents[1])
     with tempfile.TemporaryDirectory(prefix="renamer-bundle-test-", dir=executable.parent) as directory:
         root = Path(directory)
         source = root / "blue_jacket.JPG"

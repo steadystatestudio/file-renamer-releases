@@ -1149,3 +1149,5 @@ def test_help_uses_current_version_and_rule_syntax(window, monkeypatch):
     assert 'New rules use one-based positions' in shown[0]
     assert '$1 inserts the first capture group' in shown[0]
     assert 'Legacy presets keep zero-based positions and Python regex' in shown[0]
+    assert ('File Renamer is an independent project and is not affiliated with or endorsed by den4b or ReNamer.'
+            in shown[0])

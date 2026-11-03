@@ -1539,7 +1539,8 @@ class MainWindow(QMainWindow):
             "Invalid names are blocked. Add Repair filename to fix characters explicitly.\n\n"
             "After a batch, edit a rule or press F5 to preview another rename.\n\n"
             f"Version {__version__} · Steady State Studio · MIT license\n"
-            "Design inspired by Square Photo Padder."
+            "Design inspired by Square Photo Padder.\n\n"
+            "File Renamer is an independent project and is not affiliated with or endorsed by den4b or ReNamer."
         )
         box.setInformativeText(f'<a href="{KOFI_URL}">Support on Ko-fi</a>')
         box.setTextFormat(Qt.AutoText)

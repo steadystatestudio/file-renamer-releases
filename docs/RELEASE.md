@@ -1,4 +1,4 @@
-# Releasing File Renamer 2.0.5
+# Releasing File Renamer 2.0.6
 
 Release packages are built from an explicitly selected source commit on main.
 
@@ -11,7 +11,7 @@ repository. Package metadata uses that public repository identity.
 
 After reviewed changes are merged to main, manually dispatch **Release preparation**
 in `build-release.yml` with the exact 40-character main commit and
-`v2.0.5`. The script rejects an automatic push, another branch or unlisted repository, a
+`v2.0.6`. The script rejects an automatic push, another branch or unlisted repository, a
 reviewed-commit mismatch, a tag/version mismatch, an existing moved tag, or any
 published release. The full paginated release inventory is inspected before a
 draft is created. The workflow never publishes or changes repository visibility.
@@ -43,6 +43,14 @@ not rebuild the packages on Ubuntu 24.04.
 The draft includes package checksums, source commit/tree metadata, passing tests,
 matching dependency sources and native library notices. Finalization verifies
 all retained asset digests before creating `RELEASE-READY.json`.
+
+Native builds stage the explicit public documentation list in
+`scripts/package_documentation.py`, replacing any previous packaged docs directory.
+Missing required files stop the build; linked documentation paths are rejected.
+The full MIT license is included as both `LICENSE` (for README's local link) and
+`LICENSE.txt`, alongside third-party notices and dependency license texts.
+Build checks and native portable-bundle smoke checks verify the staged documents
+against source. Inspect the same documentation inside the final AppImage before publication.
 
 Before publishing the stable release, inspect that receipt and exact bytes,
 validate the user-facing screenshots and exercise ordinary dialogs on the

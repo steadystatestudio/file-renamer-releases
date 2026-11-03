@@ -1,5 +1,13 @@
 # Changes
 
+## 2.0.6
+
+- State File Renamer's independence in the README and Help dialog.
+- Package an explicit set of public documentation, remove stale staged docs, and
+  fail builds with missing required files or linked documentation paths.
+- Include a `LICENSE` alias so the packaged README's MIT license link works,
+  retaining `LICENSE.txt`, third-party notices and dependency license texts.
+
 ## 2.0.5
 
 - Clarify rule behavior, preset formats, platform limits and validation messages.

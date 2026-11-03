@@ -15,6 +15,7 @@ from build_environment import pyinstaller_environment
 from build_manifest import write_bundle_info, write_manifest
 from fetch_appimagetool import SHA256, SIZE, verify_file
 from fetch_appimagetool import main as fetch_appimage_inputs
+from package_documentation import stage_documentation, verify_documentation
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,11 +59,8 @@ def main() -> int:
             raise RuntimeError("Build output escaped the project")
     subprocess.run(command, check=True, env=pyinstaller_environment())
     bundle = ROOT / "dist/File-Renamer"
-    shutil.copy2(ROOT / "README.md", bundle / "README.md")
-    shutil.copy2(ROOT / "LICENSE", bundle / "LICENSE.txt")
-    shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", bundle / "THIRD_PARTY_NOTICES.md")
-    if (ROOT / "docs").exists():
-        shutil.copytree(ROOT / "docs", bundle / "docs", dirs_exist_ok=True)
+    stage_documentation(ROOT, bundle)
+    verify_documentation(bundle, ROOT)
     # Include the installed dependency license texts alongside the dynamic libraries.
     import importlib.metadata
     licenses = bundle / "licenses"
