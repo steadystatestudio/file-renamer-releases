@@ -1,5 +1,10 @@
 # Changes
 
+## 2.0.7
+
+- Remove the affiliation statement from the README and Help dialog.
+- Renaming behavior and saved preset formats are unchanged.
+
 ## 2.0.6
 
 - State File Renamer's independence in the README and Help dialog.
