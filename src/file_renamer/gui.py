@@ -833,7 +833,10 @@ class MainWindow(QMainWindow):
         self.setMinimumHeight(self.centralWidget().minimumSizeHint().height())
         if not self.isMaximized() and not self.isMinimized() and self.width() < self.minimumWidth():
             self.resize(self.minimumWidth(), self.height())
-        self.window_size_guard.update()
+        # Wait for native frame margins before clamping restored geometry.
+        # The guard also runs on Show, including the first launch.
+        if self.isVisible():
+            self.window_size_guard.update()
         self._fit_window_to_screen()
         self.centralWidget().layout().activate()
         root.layout().activate()

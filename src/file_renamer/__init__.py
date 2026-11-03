@@ -1,3 +1,3 @@
 """Steady State Studio File Renamer."""
 
-__version__ = "2.0.11"
+__version__ = "2.0.12"
