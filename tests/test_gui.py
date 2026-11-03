@@ -188,7 +188,7 @@ def test_fixed_action_row(app, window, width, monkeypatch):
 
     from PySide6.QtCore import QRect
 
-    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1080)))
+    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1080), availableGeometryChanged=app.primaryScreen().availableGeometryChanged))
     window.resize(width, 720)
     app.processEvents()
     controls = [window.collapse_rules, window.rule_buttons[0], window.preset_more, window.rename, window.undo]
@@ -262,7 +262,7 @@ def test_stacked_names_wrap_and_keep_file_selection(app, window, make_entry, mon
 
     from file_renamer.planner import build_plan
 
-    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1080)))
+    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1080), availableGeometryChanged=app.primaryScreen().availableGeometryChanged))
     entry = make_entry("long-name-" * 16 + ".txt")
     entries = [entry]
     window.model.reset_entries(entries)
@@ -775,7 +775,7 @@ def test_window_minimum_preserves_all_buttons_on_narrow_screens(app, window, mon
 
     from PySide6.QtCore import QRect
 
-    screen = SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1080))
+    screen = SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1080), availableGeometryChanged=app.primaryScreen().availableGeometryChanged)
     monkeypatch.setattr(window, "screen", lambda: screen)
     window._update_layout_constraints()
     window.resize(100, 800)
@@ -799,7 +799,7 @@ def test_window_minimum_preserves_all_buttons_on_narrow_screens(app, window, mon
     window._update_layout_constraints()
     window.resize(764, 520)
     app.processEvents()
-    assert window.minimumWidth() == window.content_root.minimumWidth()
+    assert window.minimumWidth() >= window.content_root.minimumWidth()
     assert window.width() >= window.content_root.minimumWidth()
     assert not hasattr(window, "content_scroll")
     for button in [window.collapse_rules, *window.rule_buttons, window.preset_more]:
@@ -821,7 +821,7 @@ def test_system_font_survives_themes_and_large_text_reflows(app, window, monkeyp
     enlarged = QFont(original)
     enlarged.setPointSizeF(18)
     area = QRect(0, 0, 1024, 900)
-    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: area))
+    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: area, availableGeometryChanged=app.primaryScreen().availableGeometryChanged))
     try:
         app.setFont(enlarged)
         window.resize(990, 820)
@@ -861,7 +861,7 @@ def test_narrow_desktop_keeps_commands_and_status_inside_work_area(app, window, 
     from PySide6.QtCore import QRect
 
     available = QRect(*work_area)
-    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: available))
+    monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(availableGeometry=lambda: available, availableGeometryChanged=app.primaryScreen().availableGeometryChanged))
     window.resize(1600, 1000)
     window._update_layout_constraints()
     app.processEvents()

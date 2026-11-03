@@ -1,5 +1,11 @@
 # Changes
 
+## 2.0.10 — 2026-11-03
+
+- Restore a useful minimum window size so the preview, everyday controls, task actions and status remain visible together.
+- Measure the layout at the system font size; adapt the minimum to the current monitor and use scrolling when its work area is genuinely too small.
+- Repair undersized restored windows while keeping the system-font improvements.
+
 ## 2.0.9
 
 - Follow the operating system's interface font and text size, including Cinnamon,

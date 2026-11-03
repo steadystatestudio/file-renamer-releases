@@ -721,6 +721,8 @@ class MainWindow(QMainWindow):
             self._toggle_rules_panel()
         self._restore_columns()
         self._resize_file_rows()
+        from .window_size import WindowSizeGuard
+        self.window_size_guard = WindowSizeGuard(self, (900, 650), None)
         self.layout_timer = QTimer(self)
         self.layout_timer.setSingleShot(True)
         self.layout_timer.timeout.connect(self._update_layout_constraints)
@@ -831,6 +833,7 @@ class MainWindow(QMainWindow):
         self.setMinimumHeight(self.centralWidget().minimumSizeHint().height())
         if not self.isMaximized() and not self.isMinimized() and self.width() < self.minimumWidth():
             self.resize(self.minimumWidth(), self.height())
+        self.window_size_guard.update()
         self._fit_window_to_screen()
         self.centralWidget().layout().activate()
         root.layout().activate()
