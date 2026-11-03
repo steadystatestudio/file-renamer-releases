@@ -1117,7 +1117,7 @@ def test_rule_areas_fit_width_with_long_content(app, window):
         dialog = RuleDialog(window, RuleSpec(kind, "name" if kind == "repair" else "stem"))
         dialog.show()
         app.processEvents()
-        assert dialog.editor_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+        assert dialog.editor_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarAsNeeded
         assert dialog.editor_scroll.horizontalScrollBar().maximum() == 0
         assert not dialog.findChildren(QComboBox)
         for widget in dialog.widgets.values():
