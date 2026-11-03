@@ -1,10 +1,12 @@
 """Regression checks for useful minimum windows and monitor changes."""
 from types import SimpleNamespace
+
 import pytest
 from PySide6.QtCore import QRect, QSettings
 from PySide6.QtGui import QFont
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
+
 from file_renamer.gui import MainWindow
 
 
