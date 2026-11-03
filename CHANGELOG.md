@@ -1,12 +1,14 @@
 # Changes
 
-## 2.0.8
+## 2.0.9
 
 - Follow the operating system's interface font and text size, including Cinnamon,
   GNOME and MATE settings in Linux packages. Reopen the app after changing desktop
   font settings. Changing the app's appearance no longer resets the font.
 - Keep rule editors, tables and status text at the system size. Reflow commands
   and scroll rule forms when larger text needs more room.
+- Grow the file table's State column with larger desktop text so its header and
+  On/Off controls remain complete, including when restoring older column widths.
 - Treat straight and curly apostrophes inside words as part of the word in Case
   title mode: `It's` stays `It's`, and `DON’T` becomes `Don’t`. Preserve forced
   fragments, extension options and saved legacy preset behavior.

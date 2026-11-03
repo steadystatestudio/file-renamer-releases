@@ -612,6 +612,45 @@ def test_status_width_ignores_saved_width(app, tmp_path):
     widget.close()
 
 
+@pytest.mark.parametrize("points", [21, 27])
+def test_state_column_fits_larger_desktop_font_and_saved_width(app, tmp_path, points):
+    from PySide6.QtGui import QFont
+
+    from file_renamer.themes import apply_theme
+
+    original = QFont(app.font())
+    chosen = QFont(original)
+    chosen.setPointSizeF(points)
+    app.setFont(chosen)
+    widget = None
+    try:
+        settings = QSettings(str(tmp_path / "state-width.ini"), QSettings.IniFormat)
+        settings.setValue("file_columns_v3", '{"widths": [70, 450, 130], "hidden": []}')
+        widget = MainWindow(tmp_path / "data", settings)
+        widget.setAttribute(Qt.WA_DontShowOnScreen)
+        widget.show()
+        app.processEvents()
+        widget._resize_file_rows()
+        header = widget.table.horizontalHeader()
+        required = header.fontMetrics().horizontalAdvance("State") + 20
+        assert widget.table.columnWidth(0) >= required
+        assert widget.table.columnWidth(0) >= widget.table.fontMetrics().horizontalAdvance("Off") + 32
+        widget.table.setColumnWidth(0, required + 100)
+        widget._resize_file_rows()
+        assert widget.table.columnWidth(0) == required + 100
+        widget.table.setColumnHidden(0, True)
+        widget._resize_file_rows()
+        assert widget.table.isColumnHidden(0)
+        widget._reset_columns()
+        assert not widget.table.isColumnHidden(0)
+        assert widget.table.columnWidth(0) >= required
+    finally:
+        if widget is not None:
+            widget.close()
+        app.setFont(original)
+        apply_theme(app)
+
+
 def test_removed_labels_and_empty_status_gap(app, window):
     from PySide6.QtWidgets import QLabel
 

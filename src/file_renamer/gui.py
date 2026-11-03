@@ -1023,6 +1023,11 @@ class MainWindow(QMainWindow):
 
     def _resize_file_rows(self):
         header = self.table.horizontalHeader()
+        header.ensurePolished()
+        state_width = max(header.fontMetrics().horizontalAdvance(self.model.HEADERS[0]) + 20,
+                          self.table.fontMetrics().horizontalAdvance("Off") + 32)
+        if not self.table.isColumnHidden(0) and self.table.columnWidth(0) < state_width:
+            self.table.setColumnWidth(0, state_width)
         width = header.fontMetrics().horizontalAdvance("Status") + 20
         for row in range(self.model.rowCount()):
             status = self.model.index(row, 2).data(Qt.DisplayRole) or ""
