@@ -6,6 +6,8 @@ import math
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QFontMetrics, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
+    QBoxLayout,
     QButtonGroup,
     QCheckBox,
     QDialog,
@@ -32,6 +34,8 @@ from PySide6.QtWidgets import (
 
 from .appearance_controls import AppearanceSettingsDialog
 from .choice_buttons import AccentCheckBox, AccentRadioButton
+from .desktop_geometry import available_geometry as desktop_available_geometry
+from .desktop_geometry import workarea_provider
 from .models import RuleSpec
 from .registry import LABELS as COMPAT_LABELS
 from .registry import MULTILINE, REGISTRY, SIGNED, effective_options
@@ -218,6 +222,13 @@ class ChoiceGroup(QWidget):
 
 
 
+def _dialog_workarea_limits(dialog):
+    area = desktop_available_geometry(dialog, dialog.screen().availableGeometry())
+    frame = dialog.frameGeometry()
+    return (area, max(1, area.width() - max(40, frame.width() - dialog.width())),
+            max(1, area.height() - max(80, frame.height() - dialog.height())))
+
+
 class FittedFormDialog(QDialog):
     """Fit ordinary forms to their content; keep long lists scrollable."""
 
@@ -226,6 +237,11 @@ class FittedFormDialog(QDialog):
         self.setSizeGripEnabled(False)
         self.setWindowFlag(Qt.WindowMaximizeButtonHint, False)
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        self.fit_timer = QTimer(self)
+        self.fit_timer.setSingleShot(True)
+        self.fit_timer.timeout.connect(self.fit_to_screen)
+        self._workarea_provider = workarea_provider(QApplication.instance())
+        self._workarea_provider.changed.connect(self._workarea_changed)
 
     def fit_to_screen(self):
         self.ensurePolished()
@@ -248,30 +264,64 @@ class FittedFormDialog(QDialog):
         self._fitted_body.setMinimumHeight(0)
         body_layout.activate()
         outer.activate()
-        area = self.screen().availableGeometry()
+        _, cap_width, cap_height = _dialog_workarea_limits(self)
         margins = outer.contentsMargins()
         extra_width = margins.left() + margins.right()
         actions = outer.itemAt(outer.count() - 1)
-        width = min(max(1, area.width() - 40),
+        if isinstance(actions.widget(), QDialogButtonBox):
+            actions.widget().setOrientation(Qt.Horizontal)
+            if actions.minimumSize().width() > max(1, cap_width - extra_width):
+                actions.widget().setOrientation(Qt.Vertical)
+        width = min(cap_width,
                     max(self._fitted_body.sizeHint().width(), actions.sizeHint().width()) + extra_width)
         body_height = body_layout.totalHeightForWidth(max(1, width - extra_width))
         body_height = max(self._fitted_body.minimumSizeHint().height(),
                           body_height if body_height > 0 else body_layout.sizeHint().height())
         self._fitted_body.setMinimumHeight(body_height)
         height = body_height + actions.sizeHint().height() + outer.spacing() + margins.top() + margins.bottom()
-        self.setFixedSize(width, min(max(1, area.height() - 80), height))
+        self.setFixedSize(width, min(cap_height, height))
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._screen_changed()
         self.fit_to_screen()
         if self.windowHandle() and not getattr(self, "_fit_screen_connected", False):
-            self.windowHandle().screenChanged.connect(lambda *_: self.fit_to_screen())
+            self.windowHandle().screenChanged.connect(self._screen_changed)
             self._fit_screen_connected = True
+
+    def _screen_changed(self, *_):
+        screen = self.screen()
+        previous = getattr(self, "_fit_screen", None)
+        if previous is not screen:
+            if previous is not None:
+                try:
+                    previous.availableGeometryChanged.disconnect(self._screen_changed)
+                except RuntimeError:
+                    pass
+            screen.availableGeometryChanged.connect(self._screen_changed)
+            self._fit_screen = screen
+        self._workarea_provider.refresh()
+        self._workarea_changed()
+
+    def _workarea_changed(self, *_):
+        if self.isVisible():
+            self.fit_timer.start(0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        frame = self.frameGeometry()
+        metrics = (frame.width() - self.width(), frame.height() - self.height())
+        if metrics != getattr(self, "_fit_frame_metrics", None):
+            self._fit_frame_metrics = metrics
+            if hasattr(self, "fit_timer"):
+                self.fit_timer.start(0)
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() in {QEvent.FontChange, QEvent.ApplicationFontChange, QEvent.StyleChange} and self.layout():
-            QTimer.singleShot(0, self.fit_to_screen)
+        if (event.type() in {QEvent.FontChange, QEvent.ApplicationFontChange, QEvent.StyleChange,
+                             QEvent.DevicePixelRatioChange}
+                and self.layout() and hasattr(self, "fit_timer")):
+            self._screen_changed()
 
 
 class PresetList(QListWidget):
@@ -476,6 +526,8 @@ class RuleDialog(QDialog):
         self.fit_timer = QTimer(self)
         self.fit_timer.setSingleShot(True)
         self.fit_timer.timeout.connect(self._fit_dialog)
+        self._workarea_provider = workarea_provider(QApplication.instance())
+        self._workarea_provider.changed.connect(self._workarea_changed)
         self._fit_dialog()
 
     def _fit_dialog(self):
@@ -486,8 +538,11 @@ class RuleDialog(QDialog):
             self.ensurePolished()
             for widget in self.findChildren(QWidget):
                 widget.ensurePolished()
-            available = self.screen().availableGeometry()
-            max_width, max_height = max(1, available.width() - 40), max(1, available.height() - 80)
+            available, max_width, max_height = _dialog_workarea_limits(self)
+            button_layout = self.buttons.layout()
+            button_layout.setDirection(QBoxLayout.LeftToRight)
+            if button_layout.minimumSize().width() > max_width:
+                button_layout.setDirection(QBoxLayout.TopToBottom)
             self._fit_area_signature = available.getRect()
             margins = self.layout().contentsMargins()
             gap = self.layout().spacing()
@@ -555,7 +610,7 @@ class RuleDialog(QDialog):
         overhead = margins.top() + margins.bottom() + self.layout().spacing() + self.buttons.sizeHint().height()
         row_height = max(self.kind.item(row).sizeHint().height() for row in range(self.kind.count()))
         catalogue = min(6, self.kind.count()) * row_height + 2 * self.kind.frameWidth()
-        maximum = max(1, self.screen().availableGeometry().height() - 80)
+        _, _, maximum = _dialog_workarea_limits(self)
         self._fitting_rule_dialog = True
         try:
             self.setFixedHeight(min(maximum, max(catalogue, needed + 4) + overhead))
@@ -564,11 +619,18 @@ class RuleDialog(QDialog):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        frame = self.frameGeometry()
+        metrics = (frame.width() - self.width(), frame.height() - self.height())
+        if metrics != getattr(self, "_fit_frame_metrics", None):
+            self._fit_frame_metrics = metrics
+            if hasattr(self, "fit_timer"):
+                self._environment_fit_pending = True
+                self.fit_timer.start(0)
         if (not hasattr(self, "fit_timer") or self._fitting_rule_dialog or self._environment_fit_pending
                 or not self.isVisible() or self._kind() not in TEXT_EDITOR_KINDS
                 or event.size().width() == event.oldSize().width()):
             return
-        if self.screen().availableGeometry().getRect() != self._fit_area_signature:
+        if desktop_available_geometry(self, self.screen().availableGeometry()).getRect() != self._fit_area_signature:
             return
         # Only window-system user resizing updates the preference. Automatic
         # fitting, style changes and monitor clamping must never replace it.
@@ -663,20 +725,37 @@ class RuleDialog(QDialog):
             QEvent.FontChange,
             QEvent.ApplicationFontChange,
             QEvent.StyleChange,
+            QEvent.DevicePixelRatioChange,
         }:
-            self._environment_fit_pending = True
-            self.fit_timer.start(0)
+            self._screen_changed()
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._screen_changed()
         if not getattr(self, "_screen_connected", False) and self.windowHandle():
             self.windowHandle().screenChanged.connect(self._screen_changed)
             self._screen_connected = True
         self._fit_dialog()
 
     def _screen_changed(self, *_):
+        screen = self.screen()
+        previous = getattr(self, "_fit_screen", None)
+        if previous is not screen:
+            if previous is not None:
+                try:
+                    previous.availableGeometryChanged.disconnect(self._screen_changed)
+                except RuntimeError:
+                    pass
+            screen.availableGeometryChanged.connect(self._screen_changed)
+            self._fit_screen = screen
+        self._workarea_provider.refresh()
         self._environment_fit_pending = True
         self.fit_timer.start(0)
+
+    def _workarea_changed(self):
+        if self.isVisible():
+            self._environment_fit_pending = True
+            self.fit_timer.start(0)
 
     def _kind(self):
         return self.kind.currentItem().data(Qt.UserRole)

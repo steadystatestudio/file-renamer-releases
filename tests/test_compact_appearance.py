@@ -93,7 +93,7 @@ def test_editor_preference_survives_modes_restart_and_screen_clamping(app, compa
     window = compact_window
     dialog = RuleDialog(window, RuleSpec("insert", behavior="renamer"))
     area = SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1200))
-    monkeypatch.setattr(dialog, "screen", lambda: area)
+    monkeypatch.setattr(dialog.screen(), "availableGeometry", lambda: area.availableGeometry())
     dialog.show()
     settle(app)
     assert dialog.maximumWidth() > dialog.minimumWidth()
@@ -116,7 +116,7 @@ def test_editor_preference_survives_modes_restart_and_screen_clamping(app, compa
     assert json.loads(window.settings.value(EDITOR_WIDTHS_KEY))["insert"] == preferred
     dialog.close()
     reopened = RuleDialog(window, RuleSpec("insert", behavior="renamer"))
-    monkeypatch.setattr(reopened, "screen", lambda: SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1200)))
+    monkeypatch.setattr(reopened.screen(), "availableGeometry", lambda: QRect(0, 0, 1920, 1200))
     reopened.show()
     settle(app)
     assert abs(reopened.width() - restored_width) <= 2
@@ -149,7 +149,7 @@ def test_fitted_form_has_no_manual_expansion(app, compact_window):
 
 def test_fitted_form_scrolls_only_body_on_genuinely_small_screen(app, compact_window, monkeypatch):
     dialog = SavePresetDialog("Example", compact_window)
-    monkeypatch.setattr(dialog, "screen", lambda: SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 300, 180)))
+    monkeypatch.setattr(dialog.screen(), "availableGeometry", lambda: QRect(0, 0, 300, 180))
     dialog.show()
     settle(app)
     assert dialog.height() <= 100
@@ -173,7 +173,7 @@ def test_72_point_preset_form_keeps_actions_visible(app, compact_window, monkeyp
         configure_appearance(app, settings)
         apply_theme(app)
         dialog = SavePresetDialog("Example", compact_window)
-        monkeypatch.setattr(dialog, "screen", lambda: SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1200, 500)))
+        monkeypatch.setattr(dialog.screen(), "availableGeometry", lambda: QRect(0, 0, 1200, 500))
         dialog.show()
         settle(app)
         assert dialog.font().pointSizeF() == 72

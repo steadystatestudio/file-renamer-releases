@@ -79,7 +79,7 @@ def choose(dialog, kind, app):
 
 def open_editor(parent, kind, area, app, monkeypatch):
     dialog = RuleDialog(parent, RuleSpec(kind, behavior="renamer"))
-    monkeypatch.setattr(dialog, "screen", lambda: area)
+    monkeypatch.setattr(dialog.screen(), "availableGeometry", lambda: area.availableGeometry())
     dialog.show()
     settle(app, dialog)
     return dialog

@@ -72,6 +72,8 @@ from PySide6.QtWidgets import (
 from . import __version__
 from .appearance import configure_appearance
 from .application_paths import application_settings
+from .desktop_geometry import available_geometry as desktop_available_geometry
+from .desktop_geometry import workarea_provider
 from .dialogs import FittedFormDialog, LoadPresetDialog, RuleDialog, SavePresetDialog, SettingsDialog
 from .filesystem import path_key, scan_paths
 from .models import FileEntry, RenamePlan, RuleSpec
@@ -737,7 +739,7 @@ class MainWindow(QMainWindow):
         footer_layout.setContentsMargins(16, 0, 16, 8)
         footer_layout.addWidget(self.progress)
         central_layout.addWidget(footer)
-        available = self.screen().availableGeometry()
+        available = desktop_available_geometry(self, self.screen().availableGeometry())
         self.resize(min(960, available.width() - 36), min(860, available.height() - 65))
         self.move(available.center() - self.rect().center())
         geometry = self.settings.value("window_geometry")
@@ -761,6 +763,7 @@ class MainWindow(QMainWindow):
         self.layout_timer.setSingleShot(True)
         self.layout_timer.timeout.connect(self._update_layout_constraints)
         self.action_row.metricsChanged.connect(lambda: self.layout_timer.start(0))
+        workarea_provider(QApplication.instance()).changed.connect(self._desktop_workarea_changed)
         self._update_layout_constraints()
         for sequence, callback in [
             (QKeySequence.Open, self._browse_files),
@@ -801,7 +804,7 @@ class MainWindow(QMainWindow):
 
     def _update_layout_constraints(self):
         margins = self.content_root.layout().contentsMargins()
-        screen = self.screen().availableGeometry()
+        screen = desktop_available_geometry(self, self.screen().availableGeometry())
         screen_width = max(240, screen.width() - 20 - margins.left() - margins.right())
         available_width = max(160, screen_width - 2 * self.action_row.action_width() - 16)
         # Larger desktop fonts can make a single row wider than the display.
@@ -885,7 +888,7 @@ class MainWindow(QMainWindow):
     def _fit_window_to_screen(self):
         if self.isMaximized() or self.isMinimized():
             return
-        available = self.screen().availableGeometry()
+        available = desktop_available_geometry(self, self.screen().availableGeometry())
         frame = self.frameGeometry()
         frame_width = max(0, frame.width() - self.width())
         frame_height = max(0, frame.height() - self.height())
@@ -896,6 +899,10 @@ class MainWindow(QMainWindow):
         top = max(available.top(), min(frame.top(), available.bottom() - frame.height() + 1))
         if frame.topLeft() != QPoint(left, top):
             self.move(left, top)
+
+    def _desktop_workarea_changed(self):
+        if self.isVisible() and hasattr(self, "layout_timer"):
+            self.layout_timer.start(0)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
