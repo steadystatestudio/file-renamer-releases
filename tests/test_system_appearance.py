@@ -77,6 +77,25 @@ def test_linux_capture_does_not_invoke_system_python(monkeypatch):
     assert result["fallback_reason"]
 
 
+@pytest.mark.parametrize("failure", [
+    FileNotFoundError(), OSError("missing host library"), ValueError("invalid settings"),
+])
+def test_windows_host_query_failure_records_bounded_fallback(monkeypatch, failure):
+    monkeypatch.setattr(appearance.sys, "platform", "win32")
+    # This Windows subprocess flag is absent from Python's Linux module. Supply
+    # it in the fixture so the intended host-query failure is actually reached.
+    monkeypatch.setattr(appearance.subprocess, "CREATE_NO_WINDOW", 0, raising=False)
+
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(appearance, "_run_host", fail)
+    result = appearance._host_appearance()
+    assert result["source"] == "native Qt fallback"
+    assert result["fallback_reason"] == type(failure).__name__
+    assert "missing host library" not in str(result) and "invalid settings" not in str(result)
+
+
 def test_plain_filename_and_document_content_typography_are_preserved():
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QLabel, QTextEdit
