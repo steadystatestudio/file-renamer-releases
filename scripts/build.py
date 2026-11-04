@@ -11,6 +11,8 @@ import sys
 import sysconfig
 from pathlib import Path
 
+from build_appearance_probe import build as build_appearance_probe, stage_probe
+
 from build_environment import pyinstaller_environment
 from build_manifest import write_bundle_info, write_manifest
 from fetch_appimagetool import SHA256, SIZE, verify_file
@@ -47,6 +49,7 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "scripts/build_rule_tools.py")], check=True)
     build = ROOT / "build"
     build.mkdir(exist_ok=True)
+    build_appearance_probe()
     # Keep build caches inside this project, including in sandboxed environments.
     os.environ["PYINSTALLER_CONFIG_DIR"] = str(build / "pyinstaller-cache")
     icon_png(build / "icon.png")
@@ -59,6 +62,7 @@ def main() -> int:
             raise RuntimeError("Build output escaped the project")
     subprocess.run(command, check=True, env=pyinstaller_environment())
     bundle = ROOT / "dist/File-Renamer"
+    stage_probe(bundle, "file_renamer")
     stage_documentation(ROOT, bundle)
     verify_documentation(bundle, ROOT)
     # Include the installed dependency license texts alongside the dynamic libraries.
@@ -106,7 +110,7 @@ def main() -> int:
     (bundle / "LICENSE-INDEX.json").write_text(json.dumps(inventory, indent=2) + "\n", encoding="utf-8")
     native = {path.relative_to(bundle).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
               for path in sorted((bundle / "_internal").rglob("*"))
-              if path.is_file() and (path.suffix.lower() in {".dll", ".pyd"} or ".so" in path.name)}
+              if path.is_file() and (path.suffix.lower() in {".dll", ".pyd"} or ".so" in path.name or path.name == "appearance-probe")}
     (bundle / "NATIVE-LIBRARIES.json").write_text(json.dumps(native, indent=2) + "\n", encoding="utf-8")
     if sys.platform == "win32":
         write_bundle_info(bundle)
