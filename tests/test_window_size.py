@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QDeadlineTimer, QRect, QSettings
+from PySide6.QtCore import QDeadlineTimer, QPoint, QRect, QSettings
 from PySide6.QtGui import QFont
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -70,7 +70,7 @@ def test_smaller_monitor_caps_minimum_then_restores_it(sized_window):
     assert window.minimumHeight() >= normal.height()
 
 
-def test_larger_font_grows_minimum_without_shrinking_text(sized_window):
+def test_larger_font_measures_controls_and_preserves_useful_workspace(sized_window):
     window, _ = sized_window
     before = window.minimumSize()
     window.settings.setValue("appearance/font_size_pt", 18)
@@ -80,10 +80,35 @@ def test_larger_font_grows_minimum_without_shrinking_text(sized_window):
     # complete suite can have other pending Qt events; wait for the behavior
     # rather than requiring every notification to finish within 80 ms.
     deadline = QDeadlineTimer(5000)
-    while not deadline.hasExpired() and (
-        window.minimumWidth() <= before.width() or window.minimumHeight() <= before.height()
-    ):
+    while not deadline.hasExpired() and window.minimumWidth() <= before.width():
         QTest.qWait(20)
     assert window.font().pointSize() == 18
     assert window.minimumWidth() > before.width()
-    assert window.minimumHeight() > before.height()
+    assert window.minimumHeight() == max(650, window.centralWidget().layout().minimumSize().height())
+    window.resize(window.minimumSize())
+    QTest.qWait(80)
+    assert window.rule_controls.geometry().right() + 8 <= window.rename.x()
+    assert window.rename.geometry().right() + 8 <= window.undo.x()
+    assert window.table.viewport().height() >= 3 * window.table.fontMetrics().height()
+    status_bottom = window.progress.mapTo(window, QPoint(0, 0)).y() + window.progress.height()
+    assert status_bottom <= window.height()
+
+
+def test_font14_accepts_smaller_compositor_client_height(sized_window):
+    window, area = sized_window
+    # A compositor can reserve panel/decorations outside Qt's reported work area.
+    # A logical workspace floor must permit its smaller client configuration.
+    area[0] = QRect(0, 0, 1280, 800)
+    window.settings.setValue("appearance/font_size_pt", 14)
+    configure_appearance(QApplication.instance(), window.settings)
+    apply_theme(QApplication.instance())
+    QTest.qWait(150)
+    window.window_size_guard.update()
+    window.resize(960, 720)
+    QTest.qWait(150)
+    assert window.font().pointSize() == 14
+    assert window.height() == 720
+    assert window.minimumHeight() <= 720
+    assert window.table.viewport().height() >= 3 * window.table.fontMetrics().height()
+    status_bottom = window.progress.mapTo(window, QPoint(0, 0)).y() + window.progress.height()
+    assert status_bottom <= 720

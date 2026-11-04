@@ -5,8 +5,8 @@ from PySide6.QtCore import QEvent, QObject, QPoint, QSize, QTimer
 class WindowSizeGuard(QObject):
     """Protect the complete working layout; allow overflow only on small screens.
 
-    Baselines describe each app's useful workspace in logical pixels at a normal
-    UI font. Actual layout requirements can increase them. Qt already accounts
+    Baselines describe each app's useful workspace in logical pixels, independent
+    of font size. Actual layout requirements can increase them. Qt already accounts
     for display scaling, so devicePixelRatio must not be applied again.
     """
 
@@ -53,8 +53,8 @@ class WindowSizeGuard(QObject):
             extra_w = max(0, frame.width() - window.width())
             extra_h = max(0, frame.height() - window.height())
             cap = QSize(max(1, area.width() - extra_w), max(1, area.height() - extra_h))
-            scale = max(1.0, window.fontMetrics().height() / 16.0)
-            wanted = QSize(round(self.baseline.width() * scale), round(self.baseline.height() * scale))
+            # Text metrics belong to the controls, not the empty workspace floor.
+            wanted = QSize(self.baseline)
             central = window.centralWidget()
             layout = central.layout()
             layout.activate()

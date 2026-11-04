@@ -737,9 +737,8 @@ class MainWindow(QMainWindow):
         footer_layout.setContentsMargins(16, 0, 16, 8)
         footer_layout.addWidget(self.progress)
         central_layout.addWidget(footer)
-        scale = max(1, self.fontMetrics().height() / 19)
         available = self.screen().availableGeometry()
-        self.resize(min(round(960 * scale), available.width() - 36), min(round(860 * scale), available.height() - 65))
+        self.resize(min(960, available.width() - 36), min(860, available.height() - 65))
         self.move(available.center() - self.rect().center())
         geometry = self.settings.value("window_geometry")
         if geometry:
