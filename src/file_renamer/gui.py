@@ -104,12 +104,40 @@ class PresetLabel(QLabel):
 class ActionRow(QWidget):
     """Center Rename, moving complete rule controls above it when space is tight."""
 
+    metricsChanged = Signal()
+
     def __init__(self, rename, undo, controls):
         super().__init__()
         self.rename, self.undo, self.controls = rename, undo, controls
+        self._metrics = None
+        self.metrics_timer = QTimer(self)
+        self.metrics_timer.setSingleShot(True)
+        self.metrics_timer.timeout.connect(self._refresh_metrics)
         for widget in (rename, undo, controls):
             widget.setParent(self)
+            widget.installEventFilter(self)
+        for widget in controls.findChildren(QWidget):
+            widget.installEventFilter(self)
         self.setObjectName("actionRow")
+
+    def event(self, event):
+        result = super().event(event)
+        if event.type() == QEvent.LayoutRequest and hasattr(self, "metrics_timer"):
+            self.metrics_timer.start(0)
+        return result
+
+    def eventFilter(self, watched, event):
+        if event.type() in {QEvent.FontChange, QEvent.StyleChange, QEvent.LayoutRequest}:
+            self.metrics_timer.start(0)
+        return super().eventFilter(watched, event)
+
+    def _refresh_metrics(self):
+        # A stylesheet can invalidate child hints after the parent's style event.
+        # React to those hints even when the window's size has not changed.
+        metrics = tuple(widget.sizeHint().toTuple() for widget in (self.controls, self.rename, self.undo))
+        if metrics != self._metrics:
+            self._metrics = metrics
+            self.metricsChanged.emit()
 
     def action_width(self):
         return max(112, self.rename.sizeHint().width(), self.undo.sizeHint().width())
@@ -733,6 +761,7 @@ class MainWindow(QMainWindow):
         self.layout_timer = QTimer(self)
         self.layout_timer.setSingleShot(True)
         self.layout_timer.timeout.connect(self._update_layout_constraints)
+        self.action_row.metricsChanged.connect(lambda: self.layout_timer.start(0))
         self._update_layout_constraints()
         for sequence, callback in [
             (QKeySequence.Open, self._browse_files),
