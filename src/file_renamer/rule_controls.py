@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHeaderView,
     QInputDialog,
-    QListWidget,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -116,10 +115,12 @@ class MappingEditor(QWidget):
 
 
 def insert_metadata(parent, editor):
-    dialog = QDialog(parent)
+    from .dialogs import FittedFormDialog, PresetList
+
+    dialog = FittedFormDialog(parent)
     dialog.setWindowTitle("Insert meta tag")
     layout = QVBoxLayout(dialog)
-    choices = QListWidget()
+    choices = PresetList()
     choices.addItems(CATALOG)
     layout.addWidget(choices)
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -127,7 +128,6 @@ def insert_metadata(parent, editor):
     buttons.rejected.connect(dialog.reject)
     choices.itemDoubleClicked.connect(lambda *_: dialog.accept())
     layout.addWidget(buttons)
-    dialog.resize(430, 500)
     if dialog.exec() == QDialog.Accepted and choices.currentItem():
         text = ":" + choices.currentItem().text() + ":"
         if isinstance(editor, QPlainTextEdit):

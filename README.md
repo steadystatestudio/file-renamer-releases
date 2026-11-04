@@ -74,10 +74,11 @@ python -m file_renamer
 After renaming, the app pauses the preview so insertion/numbering rules do not
 immediately suggest another pass. Change a rule or press **F5** to begin another preview.
 
-The interface follows your operating system's font and text size. Reopen File
-Renamer after changing desktop font settings. Larger text can wrap command rows
-or add scrolling to rule forms; Light, Dark and System appearance keep the same
-text size.
+The interface follows your operating system's font, text size and selection accent.
+Settings lets you choose a custom font, size or accent if desktop matching is unavailable.
+Use **Refresh system settings** after desktop changes if they do not appear automatically.
+Light, Dark and System appearance preserve the selected text size. Portable packages
+include their runtime; matching does not require Python or PyGObject on your computer.
 
 Right-click the table to include, exclude, or remove selected files. Click column
 headings to sort. Numbering follows the displayed order of included files.
@@ -146,23 +147,26 @@ to show or hide the rule list. The control rows stay in place: file and help con
 above, and a single row with Rules and rule actions at the left, **RENAME** centered
 across the window, and **UNDO** at the far right.
 The minimum width stops horizontal resizing before action buttons overlap, keeping every
-button visible with its full label, including on smaller screens. RENAME turns blue when files
+button visible with its full label, including on smaller screens. RENAME uses your accent when files
 are loaded; it becomes clickable only when a
 valid preview has changes. Hover over it for the reason when it is unavailable.
-The Add/Edit Rule dialog fits the longest rule label and the complete list when screen height
-permits. The editor uses compact option groups, visible radio choices, checkboxes,
-and readable 12-point text. Position and delimiter fields sit beside their choices. Dialogs
-fit the selected rule and expand when options need more room; choices reflow on small screens.
-Vertical scrolling appears only when content exceeds the available screen height. Neither
-rule area scrolls horizontally.
+The Add/Edit Rule dialog fits the active form using your selected UI text size. Boolean
+and exclusive choices appear as labeled buttons, filled with the accent when selected.
+Position and delimiter fields sit beside their choices. Ordinary forms have a fitted size;
+Insert, Remove, Replace, Rearrange, Regular Expressions, Transliteration, Pascal Script,
+User Input and Mapping allow horizontal resizing and remember their own preferred widths.
+Changing a mode or using a smaller screen does not erase that preference. The category
+catalogue and long content scroll independently; form scrolling appears when the screen
+cannot fit its controls. Neither rule area scrolls horizontally. **Preset → Load** opens a
+popup list with Load/Cancel, Enter and double-click support.
 
 Resize or maximize the window; its size, screen position, maximized state, and Rules panel
 state are remembered. Each file has a centered **State** button and stacked **Original** / **New**
 names that share the same left edge and wrap to the available width. The original is above
-the proposed name, with no labels interrupting the comparison. A blue **On** button
+the proposed name, with no labels interrupting the comparison. An accent-filled **On** button
 includes the file; an outlined **Off** button excludes it. Click the button or press Space in its
-cell to toggle inclusion. Rule enablement uses the same buttons; boolean options in rule editors
-use compact checkboxes. Settings retains its labeled toggle button. **Status** follows; full folder paths remain
+cell to toggle inclusion. Rule enablement and boolean options use the same button presentation,
+retaining native checkbox semantics and keyboard support. **Status** follows; full folder paths remain
 available in tooltips.
 Status fits its longest currently displayed word with compact padding; multiword statuses
 and complete error messages wrap. Right-click a

@@ -1,5 +1,13 @@
 # Changes
 
+## 2.2.0 — 2026-11-04
+
+- Improve automatic Linux appearance matching with independent font, light/dark and accent providers, including desktop portals, KDE, explicitly selected qt6ct and a bundled native GTK reader. Basic matching needs no installed Python or PyGObject.
+- Add saved system/custom font and accent controls, Refresh system settings and an appearance-only Reset. Appearance choices apply to all app text and Qt file/color dialogs.
+- Let Rename move horizontally to its neighboring controls before the window reaches its measured minimum width. Remove the redundant border around Rules and reduce empty footer space.
+- Open saved presets in a fitted Load dialog. Present rule booleans and exclusive options as accent-highlighted buttons while retaining their checkbox/radio keyboard and saved-value behavior.
+- Fit ordinary forms to their active controls. Text-heavy rule editors allow horizontal resizing and remember a separate preferred width for each editor across mode changes and restarts. Long category lists and content still scroll; smaller screens clamp the visible width without replacing the preference.
+
 ## 2.1.0 — 2026-11-03
 
 All interface text follows the configured desktop UI size, including headings, Help, tables and status. Document pages, exported captions and watermarks retain their own content typography.

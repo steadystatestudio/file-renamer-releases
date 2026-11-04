@@ -48,12 +48,10 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QListWidget,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -72,8 +70,9 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .appearance import configure_appearance
 from .application_paths import application_settings
-from .dialogs import RuleDialog, SavePresetDialog, SettingsDialog
+from .dialogs import FittedFormDialog, LoadPresetDialog, RuleDialog, SavePresetDialog, SettingsDialog
 from .filesystem import path_key, scan_paths
 from .models import FileEntry, RenamePlan, RuleSpec
 from .rules import RULE_LABELS, rule_details, rule_summary
@@ -520,6 +519,7 @@ class MainWindow(QMainWindow):
                 _, self.rules = parse_preset(json.loads(saved))
         except Exception as exc:
             self.startup_errors.append(f"Saved rules could not be loaded: {exc}")
+        configure_appearance(QApplication.instance(), self.settings, theme_key="theme")
         apply_theme(QApplication.instance(), self.settings.value("theme", "system", type=str))
         self.debounce = QTimer(self)
         self.debounce.setSingleShot(True)
@@ -619,9 +619,9 @@ class MainWindow(QMainWindow):
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._table_menu)
         files_layout.addWidget(self.table, 1)
-        panel = QFrame()
-        panel.setObjectName("panel")
+        panel = QWidget()
         panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
         action_left = QWidget()
         self.rule_controls = action_left
         preset_row = QGridLayout(action_left)
@@ -706,7 +706,7 @@ class MainWindow(QMainWindow):
         self.progress.preview()
         footer = QWidget()
         footer_layout = QVBoxLayout(footer)
-        footer_layout.setContentsMargins(16, 0, 16, 16)
+        footer_layout.setContentsMargins(16, 0, 16, 8)
         footer_layout.addWidget(self.progress)
         central_layout.addWidget(footer)
         scale = max(1, self.fontMetrics().height() / 19)
@@ -728,7 +728,8 @@ class MainWindow(QMainWindow):
         self._restore_columns()
         self._resize_file_rows()
         from .window_size import WindowSizeGuard
-        self.window_size_guard = WindowSizeGuard(self, (900, 650), None)
+        # Width follows the measured controls, not a scaled desktop-width floor.
+        self.window_size_guard = WindowSizeGuard(self, (0, 650), None)
         self.layout_timer = QTimer(self)
         self.layout_timer.setSingleShot(True)
         self.layout_timer.timeout.connect(self._update_layout_constraints)
@@ -1199,17 +1200,8 @@ class MainWindow(QMainWindow):
 
     def _make_preset_menu(self):
         menu = QMenu(self)
-        load = QMenu("Load", menu)
-        menu.addMenu(load)
-        menu.load_menu = load  # Retain the Python wrapper for submenu actions.
+        load = menu.addAction("Load", self._choose_preset)
         load.setEnabled(bool(self.presets and self.presets.presets))
-        if self.presets:
-            for name in sorted(self.presets.presets, key=lambda name: (name != self.selected_preset, name.casefold())):
-                action = load.addAction(name.replace("&", "&&"))
-                action.setData(name)
-                action.setCheckable(True)
-                action.setChecked(name == self.selected_preset)
-                action.triggered.connect(lambda checked=False, preset=name: self._load_preset(preset))
         menu.addSeparator()
         save = menu.addAction("Save", self._save_preset)
         save.setEnabled(self.presets is not None)
@@ -1225,13 +1217,22 @@ class MainWindow(QMainWindow):
         menu.exec(self.preset_more.mapToGlobal(self.preset_more.rect().bottomLeft()))
         menu.deleteLater()
 
+    def _choose_preset(self):
+        if self.busy or not self.presets or not self.presets.presets:
+            return
+        dialog = LoadPresetDialog(self.presets.presets, self.selected_preset, self)
+        if dialog.exec() == QDialog.Accepted and dialog.selected_name:
+            self._load_preset(dialog.selected_name)
+
     def _delete_preset(self):
         if not self.presets or not self.presets.presets or self.busy:
             return
-        dialog = QDialog(self)
+        dialog = FittedFormDialog(self)
         dialog.setWindowTitle("Delete preset")
         layout = QVBoxLayout(dialog)
-        choices = QListWidget()
+        from .dialogs import PresetList
+
+        choices = PresetList()
         choices.setAccessibleName("Saved presets")
         names = sorted(self.presets.presets, key=str.casefold)
         choices.addItems(names)
@@ -1245,7 +1246,6 @@ class MainWindow(QMainWindow):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        dialog.resize(360, 300)
         if dialog.exec() != QDialog.Accepted or choices.currentItem() is None:
             dialog.deleteLater()
             return
@@ -1571,10 +1571,7 @@ class MainWindow(QMainWindow):
         if self.busy:
             return
         dialog = SettingsDialog(self.settings, self)
-        if dialog.exec() == QDialog.Accepted:
-            self.settings.setValue("theme", dialog.theme.currentText())
-            self.settings.setValue("recursive", dialog.recursive.isChecked())
-            apply_theme(QApplication.instance(), dialog.theme.currentText())
+        dialog.exec()
 
     def _open_donate(self):
         if not QDesktopServices.openUrl(QUrl(KOFI_URL)):

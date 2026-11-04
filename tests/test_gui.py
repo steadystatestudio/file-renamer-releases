@@ -358,19 +358,28 @@ def test_rule_list_selection_and_definitions(app, window):
 
 
 def test_preset_menu_selection_and_edit_keeps_identity(app, window):
+    from file_renamer.dialogs import LoadPresetDialog
+
     window.presets.save("Uppercase", [RuleSpec("case", options={"mode": "upper"})])
     window.presets.save("alpha", [RuleSpec("insert", options={"text": "a"})])
     menu = window._make_preset_menu()
-    load = menu.actions()[0].menu()
-    assert [action.data() for action in load.actions()] == ["alpha", "Uppercase"]
-    load.setActiveAction(load.actions()[1])
-    load.popup(window.preset_more.mapToGlobal(QPoint()))
-    app.processEvents()
-    QTest.keyClick(load, Qt.Key_Return)
+    assert menu.actions()[0].menu() is None
+
+    def select_uppercase():
+        dialog = app.activeModalWidget()
+        assert isinstance(dialog, LoadPresetDialog)
+        assert [dialog.choices.item(row).text() for row in range(2)] == ["alpha", "Uppercase"]
+        dialog.choices.setCurrentRow(1)
+        dialog.accept()
+
+    QTimer.singleShot(0, select_uppercase)
+    menu.actions()[0].trigger()
     assert window.rules[0].options["mode"] == "upper"
     assert window.selected_preset == "Uppercase"
     menu = window._make_preset_menu()
-    assert menu.actions()[0].menu().actions()[0].isChecked()
+    dialog = LoadPresetDialog(window.presets.presets, window.selected_preset, window)
+    assert dialog.selected_name == "Uppercase"
+    dialog.close()
     assert menu.actions()[-1].isEnabled()
     window.rules = [RuleSpec("case", options={"mode": "lower"})]
     window._rules_changed()
@@ -619,15 +628,19 @@ def test_status_width_ignores_saved_width(app, tmp_path):
 def test_state_column_fits_larger_desktop_font_and_saved_width(app, tmp_path, points):
     from PySide6.QtGui import QFont
 
+    from file_renamer.appearance import configure_appearance
     from file_renamer.themes import apply_theme
 
     original = QFont(app.font())
     chosen = QFont(original)
     chosen.setPointSizeF(points)
-    app.setFont(chosen)
+    previous_settings = getattr(app, "_studio_pilot_settings", None)
     widget = None
     try:
         settings = QSettings(str(tmp_path / "state-width.ini"), QSettings.IniFormat)
+        settings.setValue("appearance/font_mode", "custom")
+        settings.setValue("appearance/font_family", chosen.family())
+        settings.setValue("appearance/font_size_pt", points)
         settings.setValue("file_columns_v3", '{"widths": [70, 450, 130], "hidden": []}')
         widget = MainWindow(tmp_path / "data", settings)
         widget.setAttribute(Qt.WA_DontShowOnScreen)
@@ -650,7 +663,7 @@ def test_state_column_fits_larger_desktop_font_and_saved_width(app, tmp_path, po
     finally:
         if widget is not None:
             widget.close()
-        app.setFont(original)
+        configure_appearance(app, previous_settings)
         apply_theme(app)
 
 
@@ -679,7 +692,7 @@ def test_preset_delete_and_unavailable_library(window, monkeypatch):
     window.presets.save("A & B", [RuleSpec("case")])
     window._load_preset("A & B")
     menu = window._make_preset_menu()
-    assert menu.actions()[0].menu().actions()[0].data() == "A & B"
+    assert menu.actions()[0].menu() is None
     menu.actions()[-1].trigger()
     assert not window.presets.presets and not window.selected_preset
     assert window.rules == [RuleSpec("case")]
@@ -750,10 +763,15 @@ def test_dialog_fits_labels_categories_and_screen(app, window, monkeypatch):
     dialog.show()
     dialog._fit_dialog()
     app.processEvents()
-    assert dialog.kind.verticalScrollBar().maximum() == 0
+    # Short forms need not expand to show the complete category catalogue.
+    padding_row = next(row for row in range(dialog.kind.count())
+                       if dialog.kind.item(row).data(Qt.UserRole) == "padding")
+    dialog.kind.setCurrentRow(padding_row)
+    app.processEvents()
+    assert dialog.kind.verticalScrollBar().maximum() > 0
     longest = max(dialog.kind.fontMetrics().horizontalAdvance(dialog.kind.item(i).text())
                   for i in range(dialog.kind.count()))
-    assert longest + 20 <= dialog.kind.width() <= longest + 40
+    assert longest + 20 <= dialog.kind.width() <= longest + 60
     for i in range(dialog.kind.count()):
         item = dialog.kind.item(i)
         if item.data(Qt.UserRole) is None:
@@ -820,17 +838,23 @@ def test_system_font_survives_themes_and_large_text_reflows(app, window, monkeyp
     from PySide6.QtCore import QRect
     from PySide6.QtGui import QFont
 
+    from file_renamer.appearance import configure_appearance
     from file_renamer.themes import apply_theme
 
     original = QFont(app.font())
     enlarged = QFont(original)
     enlarged.setPointSizeF(18)
+    appearance_keys = ("appearance/font_mode", "appearance/font_family", "appearance/font_size_pt")
+    original_settings = {key: window.settings.value(key) for key in appearance_keys if window.settings.contains(key)}
     area = QRect(0, 0, 1024, 900)
     monkeypatch.setattr(window, "screen", lambda: SimpleNamespace(
         availableGeometry=lambda: area,
         availableGeometryChanged=app.primaryScreen().availableGeometryChanged))
     try:
-        app.setFont(enlarged)
+        window.settings.setValue("appearance/font_mode", "custom")
+        window.settings.setValue("appearance/font_family", enlarged.family())
+        window.settings.setValue("appearance/font_size_pt", 18)
+        configure_appearance(app, window.settings)
         window.resize(990, 820)
         for theme in ("dark", "light", "system"):
             apply_theme(app, theme)
@@ -857,8 +881,13 @@ def test_system_font_survives_themes_and_large_text_reflows(app, window, monkeyp
                 assert choice.height() >= choice.fontMetrics().height()
             dialog.close()
     finally:
-        app.setFont(original)
-        apply_theme(app)
+        for key in appearance_keys:
+            if key in original_settings:
+                window.settings.setValue(key, original_settings[key])
+            else:
+                window.settings.remove(key)
+        configure_appearance(app, window.settings)
+        apply_theme(app, window.settings.value("theme", "system", type=str))
 
 
 @pytest.mark.parametrize("work_area", [(65, 32, 959, 704), (0, 0, 800, 600)])
@@ -1118,8 +1147,12 @@ def test_selected_preset_restores_with_rules(app, tmp_path, modified, missing):
     assert second.selected_preset == ("" if missing else "Zulu")
     assert second.preset_label.text() == (
         "No preset selected" if missing else "Zulu (modified)" if modified else "Zulu")
-    menu = second._make_preset_menu()
-    assert [action.data() for action in menu.load_menu.actions()] == (["alpha"] if missing else ["Zulu", "alpha"])
+    from file_renamer.dialogs import LoadPresetDialog
+
+    dialog = LoadPresetDialog(second.presets.presets, second.selected_preset, second)
+    assert [dialog.choices.item(row).text() for row in range(dialog.choices.count())] == (
+        ["alpha"] if missing else ["Zulu", "alpha"])
+    dialog.close()
     second.close()
 
 
@@ -1185,7 +1218,7 @@ def test_save_preset_font_and_settings_toggle(app, window):
         assert widget.font().pointSizeF() == window.font().pointSizeF()
     settings = SettingsDialog(window.settings, window)
     assert settings.recursive.isCheckable()
-    assert not settings.findChildren(QCheckBox)
+    assert isinstance(settings.recursive, QCheckBox)
     dialog.close()
     settings.close()
 

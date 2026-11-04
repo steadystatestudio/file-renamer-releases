@@ -9,7 +9,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QMessageBox, QPushButton, QSpinBox
 
 from file_renamer.compat_rules import Evaluation
-from file_renamer.dialogs import ChoiceGroup, RuleDialog, SavePresetDialog
+from file_renamer.dialogs import ChoiceGroup, LoadPresetDialog, RuleDialog, SavePresetDialog
 from file_renamer.gui import MainWindow
 from file_renamer.models import RuleSpec
 from file_renamer.rule_controls import MappingEditor
@@ -197,7 +197,7 @@ def test_create_edit_save_and_reload_rule(app, editor_window, kind, name, option
     QTest.mouseClick(button(window, "Remove"), Qt.LeftButton)
     wait_idle(app, window)
     menu = window._make_preset_menu()
-    next(action for action in menu.load_menu.actions() if action.data() == "Created rule").trigger()
+    modal_action(menu.actions()[0].trigger, lambda dialog: None, dialog_type=LoadPresetDialog, save_label="Load")
     assert window.rules == [rule]
     wait_idle(app, window)
     window.close()

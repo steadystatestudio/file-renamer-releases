@@ -30,13 +30,14 @@ def main() -> int:
         print(f"Usage: File-Renamer {isolated_mode} FRESH_DIRECTORY", file=sys.stderr)
         return 2
 
-    from PySide6.QtCore import QLockFile, QSettings, QTimer
+    from PySide6.QtCore import QLockFile, QSettings, Qt, QTimer
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from . import __version__
     from .application_paths import application_data_dir, configure_application
     from .gui import MainWindow
 
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
     app = QApplication(sys.argv)
     from .system_fonts import capture_system_appearance
     capture_system_appearance(app)

@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication
 
+from .appearance import resolved_color_scheme
 from .system_fonts import accent_colors, apply_system_font, bind_appearance_refresh, system_font_css
 
 
@@ -34,6 +35,8 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
             pass
     if preference != "system":
         dark = preference == "dark"
+    elif resolved_color_scheme(app) in {"dark", "light"}:
+        dark = resolved_color_scheme(app) == "dark"
     background, panel, field = ("#2c2c2c", "#252525", "#303030") if dark else ("#f3f3f3", "#ffffff", "#fafafa")
     text, muted, border = ("#f1f1f1", "#b5b5b5", "#555555") if dark else ("#222222", "#626262", "#cccccc")
     selection = accent
@@ -64,14 +67,16 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         QPushButton#primary:pressed:!disabled {{ background: {pressed}; }}
         QPushButton#primary:enabled:focus {{ border-color: {on_accent}; }}
         QPushButton#primary:disabled {{ background: {border}; color: {muted}; }}
-        QFrame#panel {{ background: {panel}; border: 1px solid {border}; border-radius: 10px; }}
+        QGroupBox#ruleDefinitions {{ border: none; margin-top: 0px; padding-top: 1.4em; }}
+        QGroupBox#ruleDefinitions::title {{ subcontrol-origin: padding; subcontrol-position: top left;
+                                          padding: 0px 8px; font-weight: 600; }}
         QTableView, QListWidget {{ background: {panel}; border: 1px solid {border}; border-radius: 8px;
                                  selection-background-color: {selection}; gridline-color: {border}; }}
         QTableView::item, QListWidget::item {{ padding: 7px; }}
         QTableView#fileTable::item {{ padding: 3px 8px; }}
         QHeaderView::section {{ background: {field}; color: {muted}; padding: 6px 8px;
                                border: none; border-bottom: 1px solid {border}; }}
-        QLineEdit, QComboBox, QSpinBox {{ background: {field}; border: 1px solid {border};
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{ background: {field}; border: 1px solid {border};
                                        border-radius: 6px; padding: 7px; min-height: 21px; }}
         QComboBox QAbstractItemView {{ background: {panel}; selection-background-color: {selection}; }}
 

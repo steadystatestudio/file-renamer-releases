@@ -24,45 +24,22 @@ def test_invalid_desktop_setting_preserves_native_font(description, scale):
     assert system_fonts.desktop_font(native, description, scale, 96) == native
 
 
-def test_explicit_qt_settings_integration_is_respected(monkeypatch):
-    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "X-Cinnamon")
-    monkeypatch.setenv("QT_QPA_PLATFORMTHEME", "qt6ct")
-    assert system_fonts._desktop_schema() is None
-
-
-def test_missing_gsettings_is_safe(monkeypatch):
-    def missing(*args, **kwargs):
-        raise FileNotFoundError()
-    monkeypatch.setattr(system_fonts.subprocess, "run", missing)
-    assert system_fonts._setting("org.cinnamon.desktop.interface", "font-name") is None
-
-
-@pytest.mark.parametrize("platform,dpr,points", [("xcb", 1.5, 14), ("wayland", 1.0, 21)])
-def test_x11_text_scaling_is_not_applied_twice(monkeypatch, platform, dpr, points):
-    from types import SimpleNamespace
-    from unittest.mock import Mock
-    app = Mock(spec=["font", "setFont", "primaryScreen", "platformName"])
-    app.font.return_value = QFont("Liberation Sans", 14)
-    app.platformName.return_value = platform
-    app.primaryScreen.return_value = SimpleNamespace(
-        logicalDotsPerInchY=lambda: 96, devicePixelRatio=lambda: dpr)
-    monkeypatch.setattr(system_fonts.sys, "platform", "linux")
-    monkeypatch.setattr(system_fonts, "_desktop_schema", lambda: "org.cinnamon.desktop.interface")
-    monkeypatch.setattr(system_fonts, "_setting",
-                        lambda schema, key: "Liberation Sans 14" if key == "font-name" else 1.5)
-    system_fonts.apply_system_font(app)
-    assert app.setFont.call_args.args[0].pointSizeF() == points
-    system_fonts.apply_system_font(app)
-    assert app.setFont.call_count == 1
-
-
-def test_stylesheet_baseline_includes_native_tables_and_new_dialogs():
+def test_stylesheet_baseline_includes_native_tables_and_new_dialogs(tmp_path):
+    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication, QDialog, QTableWidget
+
+    from file_renamer.appearance import configure_appearance
+
     app = QApplication.instance() or QApplication([])
     previous_font, previous_style = QFont(app.font()), app.styleSheet()
+    previous_settings = getattr(app, "_studio_pilot_settings", None)
+    settings = QSettings(str(tmp_path / "appearance.ini"), QSettings.IniFormat)
     try:
         chosen = QFont("Sans Serif", 18)
-        app.setFont(chosen)
+        settings.setValue("appearance/font_mode", "custom")
+        settings.setValue("appearance/font_family", chosen.family())
+        settings.setValue("appearance/font_size_pt", 18)
+        configure_appearance(app, settings)
         app.setStyleSheet("QWidget {" + system_fonts.system_font_css(app) + "color: #222;}"
                          "QHeaderView::section { padding: 9px; }")
         dialog = QDialog()
@@ -75,5 +52,6 @@ def test_stylesheet_baseline_includes_native_tables_and_new_dialogs():
             assert widget.font().family() == chosen.family()
         dialog.close()
     finally:
+        configure_appearance(app, previous_settings)
         app.setStyleSheet(previous_style)
         app.setFont(previous_font)

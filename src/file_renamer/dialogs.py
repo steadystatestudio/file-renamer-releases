@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QFontMetrics, QPainter, QShortcut
+import json
+import math
+
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QFontMetrics, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -20,16 +22,16 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
-    QRadioButton,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
     QStyle,
-    QStyleOptionButton,
     QVBoxLayout,
     QWidget,
 )
 
+from .appearance_controls import AppearanceSettingsDialog
+from .choice_buttons import AccentCheckBox, AccentRadioButton
 from .models import RuleSpec
 from .registry import LABELS as COMPAT_LABELS
 from .registry import MULTILINE, REGISTRY, SIGNED, effective_options
@@ -124,43 +126,8 @@ CHOICE_LABELS = {
 }
 
 
-class ToggleButton(QPushButton):
-    """A keyboard-accessible boolean button whose label wraps at narrow widths."""
-
-    def __init__(self, text="", parent=None):
-        super().__init__(text, parent)
-        self.setCheckable(True)
-        self.setAccessibleName(text)
-        policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        policy.setHeightForWidth(True)
-        self.setSizePolicy(policy)
-
-    def minimumSizeHint(self):
-        return QSize(100, self.fontMetrics().height() + 20)
-
-    def heightForWidth(self, width):
-        return (
-            self.fontMetrics()
-            .boundingRect(QRect(0, 0, max(1, width - 28), 10000), Qt.TextWordWrap, self.text())
-            .height()
-            + 20
-        )
-
-    def sizeHint(self):
-        width = min(360, super().sizeHint().width())
-        return QSize(width, self.heightForWidth(width))
-
-    def paintEvent(self, event):
-        option = QStyleOptionButton()
-        self.initStyleOption(option)
-        option.text = ""
-        painter = QPainter(self)
-        self.style().drawControl(QStyle.CE_PushButton, option, painter, self)
-        color = self.palette().buttonText().color()
-        if self.isChecked() and self.isEnabled():
-            color = Qt.white
-        painter.setPen(color)
-        painter.drawText(self.rect().adjusted(12, 8, -12, -8), Qt.AlignCenter | Qt.TextWordWrap, self.text())
+class ToggleButton(AccentCheckBox):
+    """Compatibility name for the native checkbox with button presentation."""
 
 
 class ChoiceGroup(QWidget):
@@ -185,7 +152,7 @@ class ChoiceGroup(QWidget):
         row = QGridLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(3)
-        button = QRadioButton(label)
+        button = AccentRadioButton(label)
         self.group.addButton(button, len(self.values))
         self.values.append(value)
         row.addWidget(button, 0, 0)
@@ -251,7 +218,104 @@ class ChoiceGroup(QWidget):
 
 
 
-class SavePresetDialog(QDialog):
+class FittedFormDialog(QDialog):
+    """Fit ordinary forms to their content; keep long lists scrollable."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSizeGripEnabled(False)
+        self.setWindowFlag(Qt.WindowMaximizeButtonHint, False)
+        self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+
+    def fit_to_screen(self):
+        self.ensurePolished()
+        outer = self.layout()
+        if not hasattr(self, "_fitted_body"):
+            self._fitted_body = QWidget()
+            body_layout = QVBoxLayout(self._fitted_body)
+            body_layout.setContentsMargins(0, 0, 0, 0)
+            body_layout.setSpacing(outer.spacing())
+            # Keep the final action group outside the constrained form body.
+            while outer.count() > 1:
+                item = outer.takeAt(0)
+                body_layout.addWidget(item.widget())
+            self.content_scroll = QScrollArea()
+            self.content_scroll.setFrameShape(QScrollArea.NoFrame)
+            self.content_scroll.setWidgetResizable(True)
+            self.content_scroll.setWidget(self._fitted_body)
+            outer.insertWidget(0, self.content_scroll)
+        body_layout = self._fitted_body.layout()
+        self._fitted_body.setMinimumHeight(0)
+        body_layout.activate()
+        outer.activate()
+        area = self.screen().availableGeometry()
+        margins = outer.contentsMargins()
+        extra_width = margins.left() + margins.right()
+        actions = outer.itemAt(outer.count() - 1)
+        width = min(max(1, area.width() - 40),
+                    max(self._fitted_body.sizeHint().width(), actions.sizeHint().width()) + extra_width)
+        body_height = body_layout.totalHeightForWidth(max(1, width - extra_width))
+        body_height = max(self._fitted_body.minimumSizeHint().height(),
+                          body_height if body_height > 0 else body_layout.sizeHint().height())
+        self._fitted_body.setMinimumHeight(body_height)
+        height = body_height + actions.sizeHint().height() + outer.spacing() + margins.top() + margins.bottom()
+        self.setFixedSize(width, min(max(1, area.height() - 80), height))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.fit_to_screen()
+        if self.windowHandle() and not getattr(self, "_fit_screen_connected", False):
+            self.windowHandle().screenChanged.connect(lambda *_: self.fit_to_screen())
+            self._fit_screen_connected = True
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in {QEvent.FontChange, QEvent.ApplicationFontChange, QEvent.StyleChange} and self.layout():
+            QTimer.singleShot(0, self.fit_to_screen)
+
+
+class PresetList(QListWidget):
+    def sizeHint(self):
+        metrics = self.fontMetrics()
+        longest = max((metrics.horizontalAdvance(self.item(row).text()) for row in range(self.count())), default=0)
+        width = min(max(240, longest + 40), metrics.horizontalAdvance("M" * 36) + 40)
+        height = min(8, max(1, self.count())) * (metrics.height() + 8) + 2 * self.frameWidth()
+        return QSize(width, height)
+
+
+class LoadPresetDialog(FittedFormDialog):
+    def __init__(self, names, current="", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Load preset")
+        layout = QVBoxLayout(self)
+        self.choices = PresetList()
+        self.choices.setAccessibleName("Saved presets")
+        self.choices.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.choices.setTextElideMode(Qt.ElideRight)
+        for name in sorted(names, key=lambda value: (value != current, value.casefold())):
+            item = QListWidgetItem(name, self.choices)
+            item.setToolTip(name)
+        if self.choices.count():
+            self.choices.setCurrentRow(0)
+        layout.addWidget(self.choices)
+        buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
+        self.load_button = buttons.addButton("Load", QDialogButtonBox.AcceptRole)
+        self.load_button.setObjectName("primary")
+        self.load_button.setDefault(True)
+        self.load_button.setEnabled(self.choices.currentItem() is not None)
+        self.choices.currentRowChanged.connect(lambda row: self.load_button.setEnabled(row >= 0))
+        self.choices.itemDoubleClicked.connect(lambda *_: self.accept())
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @property
+    def selected_name(self):
+        item = self.choices.currentItem()
+        return item.text() if item else ""
+
+
+class SavePresetDialog(FittedFormDialog):
     def __init__(self, name="", parent=None):
         super().__init__(parent)
         self.setWindowTitle("Save preset")
@@ -268,7 +332,6 @@ class SavePresetDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        self.resize(440, self.sizeHint().height())
         self.name.selectAll()
         self.name.setFocus()
 
@@ -286,9 +349,37 @@ class RuleTypeList(QListWidget):
         super().keyPressEvent(event)
 
 
+TEXT_EDITOR_KINDS = frozenset({
+    "insert", "remove", "replace", "rearrange", "regex", "translit", "pascal", "userinput", "mapping",
+})
+EDITOR_WIDTHS_KEY = "ui/rule_editor_widths_v1"
+
+
 class RuleDialog(QDialog):
     def __init__(self, parent=None, rule: RuleSpec | None = None):
         super().__init__(parent)
+        from .application_paths import application_settings
+
+        self.settings = getattr(parent, "settings", None)
+        if self.settings is None:
+            self.settings = application_settings()
+        self._editor_widths = {}
+        try:
+            saved = str(self.settings.value(EDITOR_WIDTHS_KEY, "{}"))
+            values = json.loads(saved) if len(saved) <= 4096 else {}
+            if isinstance(values, dict):
+                self._editor_widths = {key: round(value) for key, value in values.items()
+                                       if key in TEXT_EDITOR_KINDS and isinstance(value, (float, int))
+                                       and not isinstance(value, bool) and math.isfinite(value)
+                                       and 80 <= value <= 20000}
+        except (TypeError, ValueError):
+            pass
+        self._fitting_rule_dialog = False
+        self._environment_fit_pending = True
+        self._fit_area_signature = None
+        self.setWindowFlag(Qt.WindowMaximizeButtonHint, False)
+        self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        self.setSizeGripEnabled(False)
         self.setWindowTitle("Edit rule" if rule else "Add a rule")
         self.setObjectName("ruleDialog")
         self.result_rule = rule
@@ -307,6 +398,8 @@ class RuleDialog(QDialog):
         self.kind.setCurrentRow(0)
         panes.addWidget(self.kind)
         definitions = QGroupBox()
+        definitions.setFlat(True)
+        definitions.setObjectName("ruleDefinitions")
         self.definitions = definitions
         definition_layout = QVBoxLayout(definitions)
         definition_layout.setContentsMargins(8, 8, 8, 8)
@@ -347,6 +440,7 @@ class RuleDialog(QDialog):
         button_layout = QHBoxLayout(buttons)
         button_layout.setContentsMargins(0, 0, 0, 0)
         primary = QPushButton("Save Rule" if rule else "Add Rule")
+        primary.setObjectName("primary")
         primary.setDefault(True)
         close = QPushButton("Cancel" if rule else "Close")
         primary.clicked.connect(self._accept)
@@ -385,58 +479,107 @@ class RuleDialog(QDialog):
         self._fit_dialog()
 
     def _fit_dialog(self):
-        self.ensurePolished()
-        for widget in self.findChildren(QWidget):
-            widget.ensurePolished()
-        available = self.screen().availableGeometry()
-        max_width, max_height = max(320, available.width() - 40), max(240, available.height() - 80)
-        margins = self.layout().contentsMargins()
-        overhead = margins.top() + margins.bottom() + self.layout().spacing() + self.buttons.sizeHint().height()
-        list_height = 2 * self.kind.frameWidth()
-        label_width = 0
-        for row in range(self.kind.count()):
-            item = self.kind.item(row)
-            metrics = QFontMetrics(item.font().resolve(self.kind.font()))
-            height = metrics.height() + 6
-            item.setSizeHint(QSize(0, height))
-            list_height += height
-            label_width = max(label_width, metrics.horizontalAdvance(item.text()))
-        list_width = label_width + 24 + 2 * self.kind.frameWidth()
-        if list_height + overhead > max_height:
-            list_width += self.style().pixelMetric(QStyle.PM_ScrollBarExtent)
-        self.kind.setFixedWidth(list_width)
-        self.definitions.setMinimumHeight(0)
-        # Reflow to the actual screen width before measuring minimum sizes.
-        field_limit = max_width - list_width - margins.left() - margins.right() - self.layout().spacing()
-        scroll_width = self.style().pixelMetric(QStyle.PM_ScrollBarExtent)
-        self._reflow_choices(field_limit - 24 - scroll_width)
-        self.form.invalidate()
-        self.definitions.layout().invalidate()
-        field_width = max(420, self.definitions.minimumSizeHint().width())
-        gap = self.layout().spacing()
-        width = min(max_width, list_width + field_width + margins.left() + margins.right() + gap)
-        editor_width = width - list_width - margins.left() - margins.right() - gap
-        self._reflow_choices(editor_width - 24 - scroll_width)
-        definition_layout = self.definitions.layout()
-        definition_layout.invalidate()
-        editor_height = max(self.definitions.minimumSizeHint().height(),
-                            self.definitions.heightForWidth(editor_width - scroll_width))
-        height = min(max_height, max(list_height, editor_height + 4) + overhead)
-        self.setMinimumSize(min(width, max_width), min(360, height))
-        self.resize(width, height)
-        self.definitions.setMinimumHeight(editor_height)
-        QTimer.singleShot(0, self, self._fit_editor_height)
+        if self._fitting_rule_dialog:
+            return
+        self._fitting_rule_dialog = True
+        try:
+            self.ensurePolished()
+            for widget in self.findChildren(QWidget):
+                widget.ensurePolished()
+            available = self.screen().availableGeometry()
+            max_width, max_height = max(1, available.width() - 40), max(1, available.height() - 80)
+            self._fit_area_signature = available.getRect()
+            margins = self.layout().contentsMargins()
+            gap = self.layout().spacing()
+            overhead = margins.top() + margins.bottom() + gap + self.buttons.sizeHint().height()
+            label_width = row_height = 0
+            for row in range(self.kind.count()):
+                item = self.kind.item(row)
+                metrics = QFontMetrics(item.font().resolve(self.kind.font()))
+                row_height = max(row_height, metrics.height() + 6)
+                item.setSizeHint(QSize(0, metrics.height() + 6))
+                label_width = max(label_width, metrics.horizontalAdvance(item.text()))
+            scroll_width = self.style().pixelMetric(QStyle.PM_ScrollBarExtent)
+            list_width = label_width + 24 + 2 * self.kind.frameWidth() + scroll_width
+            self.kind.setFixedWidth(min(list_width, max_width // 2))
+            self.kind.setMinimumHeight(0)
+            self.definitions.setMinimumHeight(0)
+            non_editor = self.kind.width() + margins.left() + margins.right() + gap
+            field_limit = max(1, max_width - non_editor)
+            preferred = self._editor_widths.get(self._kind()) if self._kind() in TEXT_EDITOR_KINDS else None
+            self._reflow_choices(field_limit - 24 - scroll_width)
+            self.form.invalidate()
+            self.definitions.layout().invalidate()
+            minimum_field = self.definitions.minimumSizeHint().width()
+            natural_field = max(minimum_field, self.definitions.sizeHint().width())
+            editor_width = min(field_limit, max(minimum_field, preferred if preferred is not None else natural_field))
+            self._reflow_choices(max(1, editor_width - 24 - scroll_width))
+            self.form.invalidate()
+            self.fields.updateGeometry()
+            definition_layout = self.definitions.layout()
+            definition_layout.invalidate()
+            editor_height = max(self.definitions.minimumSizeHint().height(),
+                                definition_layout.totalHeightForWidth(max(1, editor_width - scroll_width)))
+            # A category catalogue is scrollable content, not a reason to make
+            # a short form as tall as every category combined.
+            catalog_height = min(6, self.kind.count()) * row_height + 2 * self.kind.frameWidth()
+            height = min(max_height, max(catalog_height, editor_height + 4) + overhead)
+            width = min(max_width, non_editor + editor_width)
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(16777215, 16777215)
+            if self._kind() in TEXT_EDITOR_KINDS:
+                self.setMinimumWidth(min(max_width, non_editor + minimum_field))
+                self.setMaximumWidth(max_width)
+                self.setFixedHeight(height)
+                self.resize(width, height)
+            else:
+                self.setFixedSize(width, height)
+            self.definitions.setMinimumHeight(editor_height)
+            QTimer.singleShot(0, self, self._fit_editor_height)
+        finally:
+            self._fitting_rule_dialog = False
+            self._environment_fit_pending = False
 
     def _fit_editor_height(self):
         # Qt resolves a form's wrapping and style margins after assigning its
         # final width. Keep that width and measure the resulting content height.
         width = self.editor_scroll.viewport().width()
+        self.definitions.setMinimumHeight(0)
+        self._reflow_choices(max(1, width - 24))
+        self.form.invalidate()
+        self.fields.updateGeometry()
+        self.definitions.layout().invalidate()
         needed = max(self.definitions.minimumSizeHint().height(), self.definitions.heightForWidth(width))
         self.definitions.setMinimumHeight(needed)
-        missing = needed - self.editor_scroll.viewport().height()
-        if missing > 0:
-            maximum = max(240, self.screen().availableGeometry().height() - 80)
-            self.resize(self.width(), min(maximum, self.height() + missing + 4))
+        margins = self.layout().contentsMargins()
+        overhead = margins.top() + margins.bottom() + self.layout().spacing() + self.buttons.sizeHint().height()
+        row_height = max(self.kind.item(row).sizeHint().height() for row in range(self.kind.count()))
+        catalogue = min(6, self.kind.count()) * row_height + 2 * self.kind.frameWidth()
+        maximum = max(1, self.screen().availableGeometry().height() - 80)
+        self._fitting_rule_dialog = True
+        try:
+            self.setFixedHeight(min(maximum, max(catalogue, needed + 4) + overhead))
+        finally:
+            self._fitting_rule_dialog = False
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if (not hasattr(self, "fit_timer") or self._fitting_rule_dialog or self._environment_fit_pending
+                or not self.isVisible() or self._kind() not in TEXT_EDITOR_KINDS
+                or event.size().width() == event.oldSize().width()):
+            return
+        if self.screen().availableGeometry().getRect() != self._fit_area_signature:
+            return
+        # Only window-system user resizing updates the preference. Automatic
+        # fitting, style changes and monitor clamping must never replace it.
+        if event.spontaneous():
+            margins = self.layout().contentsMargins()
+            width = (event.size().width() - self.kind.width() - margins.left() - margins.right()
+                     - self.layout().spacing())
+            self._editor_widths[self._kind()] = max(80, width)
+            self.settings.setValue(EDITOR_WIDTHS_KEY, json.dumps(self._editor_widths, sort_keys=True))
+            self.settings.sync()
+            self._schedule_fit()
 
     def _reflow_choices(self, width):
         for widget in (self.target, *self.widgets.values()):
@@ -521,14 +664,19 @@ class RuleDialog(QDialog):
             QEvent.ApplicationFontChange,
             QEvent.StyleChange,
         }:
+            self._environment_fit_pending = True
             self.fit_timer.start(0)
 
     def showEvent(self, event):
         super().showEvent(event)
         if not getattr(self, "_screen_connected", False) and self.windowHandle():
-            self.windowHandle().screenChanged.connect(lambda *_: self.fit_timer.start(0))
+            self.windowHandle().screenChanged.connect(self._screen_changed)
             self._screen_connected = True
         self._fit_dialog()
+
+    def _screen_changed(self, *_):
+        self._environment_fit_pending = True
+        self.fit_timer.start(0)
 
     def _kind(self):
         return self.kind.currentItem().data(Qt.UserRole)
@@ -569,7 +717,7 @@ class RuleDialog(QDialog):
                 ("delete", "from_right"): "Right-to-left",
             }.get((kind, key), label_text)
             if type(default) is bool:
-                widget = QCheckBox(label_text)
+                widget = AccentCheckBox(label_text)
                 widget.setChecked(default)
             elif type(default) is int:
                 widget = QSpinBox()
@@ -700,7 +848,7 @@ class RuleDialog(QDialog):
                 default = definition.defaults[key]
                 label_text = COMPAT_LABELS[key]
                 if type(default) is bool:
-                    widget = QCheckBox(label_text)
+                    widget = AccentCheckBox(label_text)
                     widget.setChecked(default)
                 elif type(default) is int:
                     widget = QSpinBox()
@@ -886,7 +1034,7 @@ class RuleDialog(QDialog):
     def _script_help(self):
         from .pascal import FUNCTION_NAMES
 
-        dialog = QDialog(self)
+        dialog = FittedFormDialog(self)
         dialog.setWindowTitle("Pascal Script functions")
         layout = QVBoxLayout(dialog)
         description = QLabel(
@@ -896,13 +1044,12 @@ class RuleDialog(QDialog):
         )
         description.setWordWrap(True)
         layout.addWidget(description)
-        functions = QListWidget()
+        functions = PresetList()
         functions.addItems(FUNCTION_NAMES)
         layout.addWidget(functions)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        dialog.resize(560, 600)
         dialog.exec()
 
     def _goto_line(self):
@@ -918,23 +1065,22 @@ class RuleDialog(QDialog):
             editor.setFocus()
 
 
-class SettingsDialog(QDialog):
+class SettingsDialog(AppearanceSettingsDialog):
     def __init__(self, settings, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Settings")
-        layout = QVBoxLayout(self)
-        self.theme = QComboBox()
-        self.theme.addItems(["system", "dark", "light"])
-        self.theme.setCurrentText(settings.value("theme", "system", type=str))
-        layout.addWidget(QLabel("Appearance"))
-        layout.addWidget(self.theme)
-        self.recursive = ToggleButton("Include subfolders when adding folders")
+        from PySide6.QtWidgets import QApplication
+
+        from .themes import apply_theme
+
+        super().__init__(settings, parent, theme_key="theme", apply_callback=lambda: apply_theme(
+            QApplication.instance(), settings.value("theme", "system", type=str)))
+        self.theme = self.controls.theme
+        self.recursive = AccentCheckBox("Include subfolders when adding folders")
         self.recursive.setChecked(settings.value("recursive", False, type=bool))
-        layout.addWidget(self.recursive)
+        self.content_layout.addWidget(self.recursive)
         label = QLabel("Files stay on your computer. Symbolic links and junctions are skipped.")
         label.setWordWrap(True)
-        layout.addWidget(label)
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        self.content_layout.addWidget(label)
+
+    def accept(self):
+        self.settings.setValue("recursive", self.recursive.isChecked())
+        super().accept()
