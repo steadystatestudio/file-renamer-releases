@@ -759,7 +759,7 @@ def test_dialog_fits_labels_categories_and_screen(app, window, monkeypatch):
 
     dialog = RuleDialog(window)
     screen = SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 1920, 1200))
-    monkeypatch.setattr(dialog, "screen", lambda: screen)
+    monkeypatch.setattr(dialog.screen(), "availableGeometry", lambda: screen.availableGeometry())
     dialog.show()
     dialog._fit_dialog()
     app.processEvents()
@@ -1270,12 +1270,10 @@ def test_insert_inline_values_survive_choice_changes(app, window):
 
 @pytest.mark.parametrize("kind", list(REGISTRY))
 def test_rule_editor_reflows_on_small_scaled_screen(app, window, monkeypatch, kind):
-    from types import SimpleNamespace
-
     from PySide6.QtCore import QRect
 
     dialog = RuleDialog(window, RuleSpec(kind, behavior="renamer"))
-    monkeypatch.setattr(dialog, "screen", lambda: SimpleNamespace(availableGeometry=lambda: QRect(0, 0, 533, 533)))
+    monkeypatch.setattr(dialog.screen(), "availableGeometry", lambda: QRect(0, 0, 533, 533))
     dialog.show()
     for _ in range(3):
         app.processEvents()
