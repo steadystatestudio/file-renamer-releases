@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QRect, QSettings
+from PySide6.QtCore import QDeadlineTimer, QRect, QSettings
 from PySide6.QtGui import QFont
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -76,7 +76,14 @@ def test_larger_font_grows_minimum_without_shrinking_text(sized_window):
     window.settings.setValue("appearance/font_size_pt", 18)
     configure_appearance(QApplication.instance(), window.settings)
     apply_theme(QApplication.instance())
-    QTest.qWait(80)
+    # Font propagation and the measured row update are queued separately. The
+    # complete suite can have other pending Qt events; wait for the behavior
+    # rather than requiring every notification to finish within 80 ms.
+    deadline = QDeadlineTimer(5000)
+    while not deadline.hasExpired() and (
+        window.minimumWidth() <= before.width() or window.minimumHeight() <= before.height()
+    ):
+        QTest.qWait(20)
     assert window.font().pointSize() == 18
     assert window.minimumWidth() > before.width()
     assert window.minimumHeight() > before.height()
