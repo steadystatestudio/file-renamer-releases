@@ -8,10 +8,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication
 
-from .system_fonts import apply_system_font, system_font_css
+from .system_fonts import accent_colors, apply_system_font, bind_appearance_refresh, system_font_css
 
 
 def apply_theme(app: QApplication, preference: str = "system") -> None:
+    apply_system_font(app)
+    colors = accent_colors(app)
+    accent, on_accent = colors["accent"], colors["on_accent"]
+    hover, pressed = colors["hover"], colors["pressed"]
     apply_system_font(app)
     # Qt's offscreen Windows plugin may enumerate no fonts. Register an installed
     # desktop font for QA rendering without replacing the desktop font settings.
@@ -32,7 +36,7 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         dark = preference == "dark"
     background, panel, field = ("#2c2c2c", "#252525", "#303030") if dark else ("#f3f3f3", "#ffffff", "#fafafa")
     text, muted, border = ("#f1f1f1", "#b5b5b5", "#555555") if dark else ("#222222", "#626262", "#cccccc")
-    selection = "#508fdb"
+    selection = accent
     app.setProperty("dark", dark)
     palette = QPalette()
     from PySide6.QtGui import QColor
@@ -41,7 +45,7 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
                         (QPalette.AlternateBase, "#4a4a4a" if dark else "#e2e2e2"),
                         (QPalette.Mid, border), (QPalette.Button, panel),
                         (QPalette.ButtonText, text), (QPalette.Highlight, selection),
-                        (QPalette.HighlightedText, "#111111"), (QPalette.ToolTipBase, panel),
+                        (QPalette.HighlightedText, on_accent), (QPalette.ToolTipBase, panel),
                         (QPalette.ToolTipText, text)]:
         palette.setColor(role, QColor(color))
     app.setPalette(palette)
@@ -49,29 +53,29 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         QWidget {{ color: {text}; {system_font_css(app)} }}
         QMainWindow, QDialog {{ background: {background}; }}
         QPushButton {{ background: transparent; border: 1px solid {border}; border-radius: 6px;
-                       padding: 9px 13px; min-height: 19px; }}
+                       padding: 6px 10px; min-height: 0px; }}
         QPushButton:hover {{ background: {field}; border-color: {selection}; }}
-        QPushButton:pressed, QPushButton:checked {{ background: {selection}; color: #111111; }}
+        QPushButton:pressed, QPushButton:checked {{ background: {selection}; color: {on_accent}; }}
         QPushButton:disabled {{ color: {muted}; border-color: {border}; }}
         QPushButton:focus, QComboBox:focus, QLineEdit:focus {{ border: 2px solid {selection}; }}
-        QPushButton#primary {{ background: #2768ad; color: white; font-weight: 600;
-                               border: 1px solid #2768ad; }}
-        QPushButton#primary:hover:!disabled {{ background: #2f6db1; }}
-        QPushButton#primary:pressed:!disabled {{ background: #2463a6; }}
+        QPushButton#primary {{ background: {accent}; color: {on_accent}; font-weight: 600;
+                               border: 1px solid {accent}; }}
+        QPushButton#primary:hover:!disabled {{ background: {hover}; }}
+        QPushButton#primary:pressed:!disabled {{ background: {pressed}; }}
+        QPushButton#primary:enabled:focus {{ border-color: {on_accent}; }}
         QPushButton#primary:disabled {{ background: {border}; color: {muted}; }}
-        QPushButton#primary[filesLoaded="true"]:disabled {{ background: #2768ad; color: #d5e3f5; }}
         QFrame#panel {{ background: {panel}; border: 1px solid {border}; border-radius: 10px; }}
         QTableView, QListWidget {{ background: {panel}; border: 1px solid {border}; border-radius: 8px;
                                  selection-background-color: {selection}; gridline-color: {border}; }}
         QTableView::item, QListWidget::item {{ padding: 7px; }}
         QTableView#fileTable::item {{ padding: 3px 8px; }}
-        QHeaderView::section {{ background: {field}; color: {muted}; padding: 9px 8px;
+        QHeaderView::section {{ background: {field}; color: {muted}; padding: 6px 8px;
                                border: none; border-bottom: 1px solid {border}; }}
         QLineEdit, QComboBox, QSpinBox {{ background: {field}; border: 1px solid {border};
                                        border-radius: 6px; padding: 7px; min-height: 21px; }}
         QComboBox QAbstractItemView {{ background: {panel}; selection-background-color: {selection}; }}
 
-        QComboBox QAbstractItemView::item, QMenu::item {{ min-height: 26px; padding: 6px 10px; }}
+        QComboBox QAbstractItemView::item, QMenu::item {{ min-height: 0px; padding: 5px 10px; }}
         QWidget#actionRow QPushButton {{ padding: 7px 9px; }}
         QDialog#ruleDialog QPushButton {{ padding: 4px 9px; min-height: 19px; }}
         QDialog#ruleDialog QLineEdit, QDialog#ruleDialog QSpinBox {{ padding: 3px; min-height: 21px; }}
@@ -82,7 +86,8 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         QLabel#heading {{ font-weight: 600; }}
         QLabel#sectionHeading {{ font-weight: 600; padding-top: 8px; }}
         QProgressBar {{ border: none; border-radius: 6px; background: {panel};
-                       text-align: center; min-height: 36px; padding: 10px 32px;
+                       text-align: center; min-height: 0px; padding: 6px 12px;
                        font-weight: 600; }}
         QToolTip {{ background: {panel}; color: {text}; border: 1px solid {border}; padding: 6px; }}
     """)
+    bind_appearance_refresh(app, lambda: apply_theme(app, preference))

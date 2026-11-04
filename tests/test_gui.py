@@ -195,8 +195,10 @@ def test_fixed_action_row(app, window, width, monkeypatch):
     app.processEvents()
     controls = [window.collapse_rules, window.rule_buttons[0], window.preset_more, window.rename, window.undo]
     positions = [widget.mapTo(window, QPoint()) for widget in controls]
-    assert abs(window.rename.geometry().center().x() - window.action_row.rect().center().x()) <= 1
-    assert window.undo.x() - window.rename.geometry().right() >= 11
+    centered = (window.action_row.width() - window.rename.width()) // 2
+    assert window.rename.x() == max(window.rule_controls.sizeHint().width() + 8,
+                                   min(centered, window.undo.x() - window.rename.width() - 8))
+    assert window.undo.x() - window.rename.geometry().right() >= 8
     assert window.undo.geometry().right() == window.action_row.width() - 1
     assert window.rename.size() == window.undo.size()
     assert window.rename.font().pointSizeF() == window.undo.font().pointSizeF()
@@ -209,13 +211,10 @@ def test_fixed_action_row(app, window, width, monkeypatch):
                      if widget.isVisible()]
     for left, right in zip(left_controls, left_controls[1:]):
         assert left.geometry().right() < right.x()
-    if width == 1800:
-        assert all(abs(widget.mapTo(window, widget.rect().center()).y()
-                       - window.rename.mapTo(window, window.rename.rect().center()).y()) <= 1
-                   for widget in left_controls)
-        assert window.rule_controls.geometry().right() + 11 < window.rename.x()
-    else:
-        assert window.rule_controls.geometry().bottom() + 7 < window.rename.y()
+    assert all(abs(widget.mapTo(window, widget.rect().center()).y()
+                   - window.rename.mapTo(window, window.rename.rect().center()).y()) <= 1
+               for widget in left_controls)
+    assert window.rule_controls.geometry().right() + 7 < window.rename.x()
     if width == 1800:
         assert all(button.isVisible() for button in window.rule_buttons)
     for _ in range(2):
@@ -886,7 +885,8 @@ def test_narrow_desktop_keeps_commands_and_status_inside_work_area(app, window, 
         bounds = QRect(control.mapTo(window, QPoint()), control.size())
         assert window.rect().contains(bounds), control.text()
         assert control.isVisible()
-    assert window.rule_controls.geometry().bottom() < window.rename.y()
+    assert not window.rule_controls.geometry().intersects(window.rename.geometry())
+    assert window.rename.x() >= window.rule_controls.geometry().right() + 8
     assert window.splitter.height() > 150
     assert window.table.viewport().height() > 0
 
@@ -902,7 +902,7 @@ def test_centered_status_and_long_message_keep_fixed_bar(window):
     assert bar.text() == message and bar.toolTip() == message
     assert bar.accessibleDescription() == message
     assert bar.height() == height and window.minimumWidth() == minimum
-    assert height >= 56
+    assert height >= bar.fontMetrics().height() + 12
     window.operation = "Renaming"
     window._progress(4, 6)
     assert bar.text() == "Renaming 1 / 3 files · 33%"

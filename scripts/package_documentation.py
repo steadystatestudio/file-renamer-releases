@@ -6,6 +6,7 @@ import stat
 from pathlib import Path
 
 PUBLIC_DOCS = (
+    "APPEARANCE.md",
     ".nojekyll", "LINUX_BUILD.md", "PRESETS.md", "RELEASE.md", "RULE_BEHAVIOR.md",
     "VALIDATION.md", "example-preset.toml", "icon.svg", "index.html",
     "linux-screenshot.png", "screenshot.png", "style.css",

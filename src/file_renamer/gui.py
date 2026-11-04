@@ -116,13 +116,13 @@ class ActionRow(QWidget):
         return max(112, self.rename.sizeHint().width(), self.undo.sizeHint().width())
 
     def row_height(self):
-        return max(48, self.rename.sizeHint().height(), self.undo.sizeHint().height())
+        return max(self.rename.sizeHint().height(), self.undo.sizeHint().height())
 
     def spacious_width(self):
         return 2 * max(self.controls.sizeHint().width(), self.action_width()) + self.action_width() + 24
 
     def height_for_width(self, width):
-        if width >= self.spacious_width():
+        if width >= self.minimumSizeHint().width():
             return max(self.controls.sizeHint().height(), self.row_height())
         return self.controls.sizeHint().height() + self.row_height() + 8
 
@@ -130,7 +130,7 @@ class ActionRow(QWidget):
         return QSize(self.spacious_width(), self.row_height())
 
     def minimumSizeHint(self):
-        return QSize(max(self.controls.sizeHint().width(), self.action_width() * 3 + 24), self.row_height())
+        return QSize(self.controls.sizeHint().width() + 2 * self.action_width() + 16, self.row_height())
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -144,11 +144,15 @@ class ActionRow(QWidget):
         width = self.action_width()
         height = self.row_height()
         control_height = self.controls.sizeHint().height()
-        spacious = self.width() >= self.spacious_width()
+        spacious = self.width() >= self.minimumSizeHint().width()
         action_y = (self.height() - height) // 2 if spacious else control_height + 8
         control_y = (self.height() - control_height) // 2 if spacious else 0
         self.controls.setGeometry(0, control_y, self.controls.sizeHint().width(), control_height)
-        self.rename.setGeometry((self.width() - width) // 2, action_y, width, height)
+        centered = (self.width() - width) // 2
+        left_limit = self.controls.sizeHint().width() + 8
+        right_limit = self.width() - 2 * width - 8
+        action_x = max(left_limit, min(centered, right_limit)) if spacious else centered
+        self.rename.setGeometry(action_x, action_y, width, height)
         self.undo.setGeometry(self.width() - width, action_y, width, height)
 
 
@@ -169,7 +173,9 @@ class RuleTable(QTableWidget):
 
 
 def proposed_name_color():
-    return QColor("#83b8f3" if QApplication.instance().property("dark") else "#2464b1")
+    from .system_fonts import accent_text
+    app = QApplication.instance()
+    return QColor(accent_text(app, app.palette().color(QPalette.Base).name()))
 
 
 class StateDelegate(QStyledItemDelegate):
@@ -767,7 +773,8 @@ class MainWindow(QMainWindow):
     def _update_layout_constraints(self):
         margins = self.content_root.layout().contentsMargins()
         screen = self.screen().availableGeometry()
-        available_width = max(240, min(self.width(), screen.width() - 20) - margins.left() - margins.right())
+        screen_width = max(240, screen.width() - 20 - margins.left() - margins.right())
+        available_width = max(160, screen_width - 2 * self.action_row.action_width() - 16)
         # Larger desktop fonts can make a single row wider than the display.
         # Wrap whole controls instead of shrinking labels or extending offscreen.
         controls = [self.collapse_rules, *self.rule_buttons, self.preset_more]
@@ -801,8 +808,8 @@ class MainWindow(QMainWindow):
             self._rule_rows = rows
             self._rule_placements = placement_key
         self.rule_controls.layout().invalidate()
-        side_width = max(self.toolbar_left.sizeHint().width(), self.toolbar_right.sizeHint().width())
-        compact_toolbar = side_width * 2 + self.preset_label.minimumSizeHint().width() + 20 > available_width
+        left_width, right_width = self.toolbar_left.sizeHint().width(), self.toolbar_right.sizeHint().width()
+        compact_toolbar = left_width + right_width + self.preset_label.minimumSizeHint().width() + 20 > screen_width
         if getattr(self, "_compact_toolbar", None) != compact_toolbar:
             for control in (self.toolbar_left, self.toolbar_right, self.preset_label):
                 self.toolbar_layout.removeWidget(control)
@@ -815,8 +822,11 @@ class MainWindow(QMainWindow):
                 self.toolbar_layout.addWidget(self.toolbar_right, 0, 2, Qt.AlignRight)
                 self.toolbar_layout.addWidget(self.preset_label, 0, 1)
             self._compact_toolbar = compact_toolbar
-        self.toolbar_layout.setColumnMinimumWidth(0, 0 if compact_toolbar else side_width)
-        self.toolbar_layout.setColumnMinimumWidth(2, 0 if compact_toolbar else side_width)
+        symmetric_width = max(left_width, right_width)
+        if 2 * symmetric_width + self.preset_label.minimumSizeHint().width() + 20 <= screen_width:
+            left_width = right_width = symmetric_width
+        self.toolbar_layout.setColumnMinimumWidth(0, 0 if compact_toolbar else left_width)
+        self.toolbar_layout.setColumnMinimumWidth(2, 0 if compact_toolbar else right_width)
         hint = self.action_row.minimumSizeHint()
         self.action_row.setMinimumWidth(hint.width())
         root = self.content_root

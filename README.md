@@ -292,3 +292,5 @@ always appreciated. The **Donate** button in the app opens the same page in your
 
 [MIT](LICENSE), Copyright (c) 2026 Steady State Studio.
 See [third-party notices](THIRD_PARTY_NOTICES.md) for bundled dependencies.
+
+See [Desktop appearance](docs/APPEARANCE.md) for system fonts, accents, scaling and restart behavior.

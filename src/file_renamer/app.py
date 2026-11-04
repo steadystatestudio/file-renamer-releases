@@ -38,6 +38,8 @@ def main() -> int:
     from .gui import MainWindow
 
     app = QApplication(sys.argv)
+    from .system_fonts import capture_system_appearance
+    capture_system_appearance(app)
     configure_application(app, __version__)
     app.setStyle("Fusion")
     # Isolated modes accept a fresh destination only; never use ordinary user data.

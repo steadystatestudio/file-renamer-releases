@@ -109,6 +109,8 @@ def run(app, window, root: Path) -> None:
     for row in window.model.plan.files:
         assert Path(row.destination).name == "ready_" + Path(row.entry.path).name
     assert window.grab().save(str(root / "ui-preview.png"))
+    from .appearance_qa import capture_appearance
+    capture_appearance(app, window, root)
     window.rename.click()
     drain(lambda: not window.busy)
     for name, content in originals.items():
