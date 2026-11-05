@@ -16,7 +16,7 @@ The portable application bundles Python and dynamically linked PySide6/Qt and
 Shiboken components. Their own licenses apply, including the Python Software
 Foundation license and the LGPL/GPL/commercial options provided by Qt.
 Installed dependency license texts are copied into the bundle's `licenses` folder.
-The LGPLv3 and GPLv3 texts from Qt's v6.11.0 source tree are included there as well.
+The LGPLv3 and GPLv3 texts from Qt's v6.12.0 source tree are included there as well.
 `BUILD-INFO.txt` records the exact bundled Python, PySide6, and Shiboken versions.
 Python's license is also retained in PyInstaller's runtime bundle when supplied by
 the platform distribution. The libraries remain separate files in `_internal`.
@@ -51,8 +51,10 @@ offers the FPC modified-LGPL/static-linking-exception option, which is used here
 
 ## Public distribution sources and library replacement
 
-Qt/PySide6/Shiboken6 remain at the previously validated 6.11.0 versions. The
-LGPLv3 alternative is used. Separate dynamic libraries can be replaced with
+Qt/PySide6/Shiboken6 are bundled at version 6.12.0. The LGPLv3 alternative
+is used. The PySide6 metapackage also installs its 6.12.0.140 Pdf/WebEngine
+dependencies in the build environment; their unused modules are excluded from
+the application package. Separate dynamic libraries can be replaced with
 compatible modified libraries; reverse engineering for debugging those
 modifications is not restricted by this application. See
 `LIBRARY-REPLACEMENT.txt`, `SOURCE-INDEX.json`, and `LICENSE-INDEX.json` in each

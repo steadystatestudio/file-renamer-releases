@@ -21,8 +21,17 @@ MAX_SOURCE_BYTES = 1_500_000_000
 def source_index(root: Path = ROOT) -> dict:
     index = json.loads((root / "packaging/source-archives.json").read_text(encoding="utf-8"))
     lock = (root / "requirements-build-lock.txt").read_text(encoding="utf-8")
-    for name in ("PySide6", "PySide6_Addons", "PySide6_Essentials", "shiboken6"):
-        if not re.search(rf"(?mi)^{re.escape(name)}=={re.escape(index['qt_version'])}$", lock):
+    versions = index.get("binding_versions")
+    core = {"PySide6", "PySide6_Addons", "PySide6_Essentials", "shiboken6"}
+    split = {"PySide6_Pdf", "PySide6_WebEngine"}
+    if not isinstance(versions, dict) or set(versions) != core | split:
+        raise ValueError("Complete Qt binding version pins are required")
+    for name, version in versions.items():
+        if (not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+(?:\.\d+)?", version)
+                or (name in core and version != index["qt_version"])
+                or (name in split and not version.startswith(index["qt_version"] + "."))):
+            raise ValueError("Invalid Qt binding version pin")
+        if not re.search(rf"(?mi)^{re.escape(name)}=={re.escape(version)}$", lock):
             raise ValueError("Qt source pins do not match the dependency lock")
     for item in index["archives"]:
         if (Path(item["name"]).name != item["name"] or "/" in item["name"] or "\\" in item["name"]

@@ -24,6 +24,9 @@ def compact_window(app, tmp_path, monkeypatch):
         app.processEvents()
     yield window
     window.close()
+    window.deleteLater()
+    from PySide6.QtCore import QCoreApplication, QEvent
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     app.processEvents()
 
 

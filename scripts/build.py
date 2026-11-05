@@ -92,7 +92,8 @@ def main() -> int:
     (bundle / "BUILD-INFO.txt").write_text(
         f"Python: {sys.version}\n" + "\n".join(f"{name}: {version}" for name, version in versions.items()),
         encoding="utf-8")
-    for name in ("PySide6", "PySide6_Essentials", "PySide6_Addons", "shiboken6", "PyInstaller", "tomli-w"):
+    for name in ("PySide6", "PySide6_Essentials", "PySide6_Addons", "PySide6_Pdf", "PySide6_WebEngine",
+                 "shiboken6", "PyInstaller", "tomli-w"):
         distribution = importlib.metadata.distribution(name)
         for entry in distribution.files or []:
             relative = Path(str(entry))

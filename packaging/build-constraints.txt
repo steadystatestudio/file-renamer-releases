@@ -1,5 +1,10 @@
-# Match the runtime and packaging tools validated for the 1.0 desktop builds.
-PySide6==6.11.0
+# Match the runtime and packaging tools used for the portable builds.
+PySide6==6.12.0
+PySide6_Addons==6.12.0
+PySide6_Essentials==6.12.0
+PySide6_Pdf==6.12.0.140
+PySide6_WebEngine==6.12.0.140
+shiboken6==6.12.0
 PyInstaller==6.22.2
 pyinstaller-hooks-contrib==2026.7
 tomli-w==1.2.0

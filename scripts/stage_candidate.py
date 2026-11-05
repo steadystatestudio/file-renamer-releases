@@ -304,9 +304,8 @@ def stage(platform):
                 or info['platform'] != platform or info['version'] != tag[1:]):
             raise ValueError('Package provenance does not match exact clean candidate source')
         from fetch_release_sources import source_index
-        expected_qt = source_index()['qt_version']
-        for name in ('PySide6', 'PySide6_Addons', 'PySide6_Essentials', 'shiboken6'):
-            if info['dependencies'].get(name) != expected_qt:
+        for name, expected in source_index()['binding_versions'].items():
+            if info['dependencies'].get(name) != expected:
                 raise ValueError('Qt sources do not match package libraries')
         names = ['File-Renamer-windows.zip'] if platform == 'Windows' else [
             'File-Renamer-linux-x86_64.tar.gz', 'File-Renamer-x86_64.AppImage']

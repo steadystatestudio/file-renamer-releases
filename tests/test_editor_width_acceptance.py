@@ -43,6 +43,9 @@ def editor_window(app, tmp_path, monkeypatch):
     configure_appearance(app, settings)
     apply_theme(app, "system")
     window.close()
+    window.deleteLater()
+    from PySide6.QtCore import QCoreApplication, QEvent
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     app.processEvents()
 
 

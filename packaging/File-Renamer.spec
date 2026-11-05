@@ -18,7 +18,7 @@ a = Analysis(
     hiddenimports=appearance_imports,
     hookspath=[str(root / "packaging/hooks")],
     excludes=["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick",
-              "PySide6.QtNetwork", "PySide6.QtPdf", "PySide6.QtQml", "PySide6.QtQuick",
+              "PySide6.QtNetwork", "PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.QtQml", "PySide6.QtQuick",
               "readline", "tkinter", "pytest"],
     noarchive=False,
     optimize=0,

@@ -18,8 +18,24 @@ def module(name):
 
 def test_source_pins_match_locked_runtime():
     index = module('fetch_release_sources').source_index()
-    assert index['qt_version'] == '6.11.0'
+    assert index['qt_version'] == '6.12.0'
     assert len(index['archives']) == 5
+    assert index['binding_versions']['PySide6_Pdf'] == '6.12.0.140'
+    assert index['binding_versions']['PySide6_WebEngine'] == '6.12.0.140'
+
+
+@pytest.mark.parametrize('package', ['PySide6', 'PySide6_Pdf', 'PySide6_WebEngine'])
+def test_source_index_rejects_a_different_locked_binding_version(tmp_path, package):
+    source = module('fetch_release_sources')
+    packaging = tmp_path / 'packaging'
+    packaging.mkdir()
+    (packaging / 'source-archives.json').write_bytes((ROOT / 'packaging/source-archives.json').read_bytes())
+    lock = (ROOT / 'requirements-build-lock.txt').read_text(encoding='utf-8')
+    expected = source.source_index()['binding_versions'][package]
+    (tmp_path / 'requirements-build-lock.txt').write_text(
+        lock.replace(f'{package}=={expected}', f'{package}==6.11.2'), encoding='utf-8')
+    with pytest.raises(ValueError, match='dependency lock'):
+        source.source_index(tmp_path)
 
 
 def test_candidate_rejects_published_or_wrong_commit_release():
