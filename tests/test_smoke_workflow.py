@@ -108,8 +108,22 @@ raise SystemExit(app.main())
 
 def test_duplicate_instance_builds_notice_safely_before_main_window(tmp_path):
     """The first notice must not construct a native widget after releasing the GIL."""
+    from PySide6.QtCore import QSettings
+
     ready = tmp_path / "owner-ready"
     report = tmp_path / "duplicate-notice.json"
+    data = tmp_path / "data"
+    data.mkdir()
+    notice_settings = data / "isolated-notice.ini"
+    settings = QSettings(str(notice_settings), QSettings.IniFormat)
+    settings.setValue("appearance/font_mode", "custom")
+    settings.setValue("appearance/font_family", "Sans Serif")
+    settings.setValue("appearance/font_size_pt", 18)
+    settings.setValue("appearance/accent_mode", "custom")
+    settings.setValue("appearance/accent", "#d34f91")
+    settings.setValue("theme", "dark")
+    settings.sync()
+    original_preferences = notice_settings.read_bytes()
     environment = source_environment() | {
         "RENAMER_TEST_DATA": str(tmp_path / "data"),
         "RENAMER_TEST_NOTICE": str(report),
@@ -136,7 +150,9 @@ import json
 import os
 from pathlib import Path
 import sys
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import QSettings
+from PySide6.QtGui import QPalette
+from PySide6.QtWidgets import QAbstractButton, QLabel, QMessageBox
 from file_renamer import application_paths, gui
 
 def forbidden_window(*args, **kwargs):
@@ -146,6 +162,11 @@ def acknowledge_notice(self):
     Path(os.environ["RENAMER_TEST_NOTICE"]).write_text(json.dumps({
         "title": self.windowTitle(), "text": self.text(),
         "icon": self.icon().value, "buttons": self.standardButtons().value,
+        "font_pt": self.fontInfo().pointSizeF(),
+        "text_fonts": [widget.fontInfo().pointSizeF() for widget in
+                       self.findChildren(QLabel) + self.findChildren(QAbstractButton)
+                       if widget.text()],
+        "accent": self.palette().color(QPalette.Highlight).name(),
     }), encoding="utf-8")
     return QMessageBox.Ok.value
 
@@ -153,6 +174,8 @@ def acknowledge_notice(self):
 QMessageBox.exec = acknowledge_notice
 gui.MainWindow = forbidden_window
 application_paths.application_data_dir = lambda: Path(os.environ["RENAMER_TEST_DATA"])
+application_paths.application_settings = lambda: QSettings(
+    str(Path(os.environ["RENAMER_TEST_DATA"]) / "isolated-notice.ini"), QSettings.IniFormat)
 from file_renamer.app import main
 sys.argv = [sys.argv[0]]
 raise SystemExit(main())
@@ -178,6 +201,10 @@ raise SystemExit(main())
         from PySide6.QtWidgets import QMessageBox
         assert notice["icon"] == QMessageBox.Information.value
         assert notice["buttons"] == QMessageBox.Ok.value
+        assert notice["font_pt"] == 18 and notice["text_fonts"]
+        assert set(notice["text_fonts"]) == {18}
+        assert notice["accent"] == "#d34f91"
+        assert notice_settings.read_bytes() == original_preferences
         assert owner.poll() is None
         assert (Path(ready.read_text(encoding="utf-8")) / "application.lock").exists()
     finally:

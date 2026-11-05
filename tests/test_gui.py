@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QMimeData, QPoint, QPointF, QSettings, Qt, QTimer, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QMimeData, QPoint, QPointF, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtTest import QTest
 
@@ -48,7 +48,10 @@ def window(app, tmp_path, monkeypatch):
     if widget.busy:
         widget.cancel_event.set()
         wait_until(app, lambda: not widget.busy)
+    assert not widget.busy and widget.task is None
     widget.close()
+    widget.deleteLater()
+    QCoreApplication.sendPostedEvents(widget, QEvent.DeferredDelete)
     app.processEvents()
 
 

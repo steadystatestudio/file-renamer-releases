@@ -34,7 +34,8 @@ def main() -> int:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from . import __version__
-    from .application_paths import application_data_dir, configure_application
+    from .appearance import prepare_initial_appearance, prepare_window_for_show
+    from .application_paths import application_data_dir, application_settings, configure_application
     from .gui import MainWindow
 
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
@@ -53,9 +54,18 @@ def main() -> int:
             raise
         print(f"Choose a fresh, writable directory for {isolated_mode}: {exc}", file=sys.stderr)
         return 2
+    settings = (QSettings(str(isolated_dir / "settings.ini"), QSettings.IniFormat)
+                if isolated_dir else application_settings())
+    if isolated_dir is not None:
+        settings.setFallbacksEnabled(False)
+    # The locked-instance notice is also an interface text surface. Resolve its
+    # metrics before the first possible widget, not only before MainWindow.
+    prepare_initial_appearance(app, settings, theme_key="theme")
     lock = QLockFile(str(data_dir / "application.lock"))
     lock.setStaleLockTime(0)
     if not lock.tryLock(100):
+        from .themes import apply_theme
+        apply_theme(app, settings.value("theme", "system", type=str))
         # Construct the first widget through Python before entering a modal loop.
         # PySide's static information() helper releases the GIL while Qt creates
         # the dialog, which can crash its first Python meta-object lookup.
@@ -66,15 +76,13 @@ def main() -> int:
         )
         notice.exec()
         return 1
-    settings = QSettings(str(isolated_dir / "settings.ini"), QSettings.IniFormat) if isolated_dir else None
-    if settings is not None:
-        settings.setFallbacksEnabled(False)
     window = MainWindow(data_dir, settings)
     if isolated_mode == "--qa-ui":
         window.setWindowTitle("File Renamer — Isolated QA")
     app.styleHints().colorSchemeChanged.connect(
         lambda _: _refresh_theme(app, window)
     )
+    prepare_window_for_show(window, window._update_layout_constraints)
     window.show()
     if isolated_mode in {"--smoke-ui", "--smoke-workflow"}:
         def finish_smoke():

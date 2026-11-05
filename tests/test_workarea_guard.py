@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QRect, QSettings
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QRect, QSettings, Signal
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QWidget
 
 
@@ -142,12 +142,21 @@ def test_only_validated_wayland_constraint_requests_max_and_respects_other_state
     module = guard_module()
     area = [QRect(0, 0, 800, 600)]
     monkeypatch.setattr(module, "available_geometry", lambda *_: area[0])
+
+    class FixedWorkArea(QObject):
+        changed = Signal()
+        enabled = True
+        last_details = {"source": "x11-ewmh"}
+
+        def refresh(self):
+            pass
+
+    # Earlier closed MainWindows still use the application-wide controller.
+    # Their queued fits must not overwrite this unit's validated-area fixture.
+    provider = FixedWorkArea()
+    monkeypatch.setattr(module, "workarea_provider", lambda app: provider)
     window, _ = plain_window()
     guard = module.WindowSizeGuard(window, (700, 760))
-    provider = guard._workarea
-    monkeypatch.setattr(provider, "enabled", True)
-    monkeypatch.setattr(provider, "refresh", lambda: None)
-    monkeypatch.setattr(provider, "last_details", {"source": "x11-ewmh"})
     font = window.font()
     try:
         guard.update()
