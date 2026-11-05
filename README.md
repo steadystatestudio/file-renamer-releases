@@ -16,6 +16,7 @@ subscription or telemetry. Optional donations never unlock features.
 
 Choose the Windows ZIP or Linux AppImage listed in the release notes. The large
 Qt/PySide source archives are for developers and license compliance, not installation.
+The downloadable packages include Python. Automatic Linux appearance matching requires neither system Python nor PyGObject.
 Packages are unsigned; verify the published checksum and follow your normal security policy.
 
 ![File Renamer dark interface](docs/screenshot.png)
@@ -45,7 +46,7 @@ To update, close the app and replace the existing `File-Renamer-x86_64.AppImage`
 Settings, presets, and rename history use fixed user storage paths shared across versions,
 regardless of the AppImage filename.
 
-The local AppImage has been verified on Ubuntu 22.04 under WSL 2, including X11 GUI checks.
+Consult the selected release's `RELEASE-READY.json` for its exact package hashes, tested desktops and verification limits.
 See [Linux build instructions](docs/LINUX_BUILD.md) to use the dedicated WSL builder or build natively.
 AppImage generation and Linux checks can also run in the included GitHub Actions workflow.
 

@@ -50,6 +50,7 @@ from .rule_controls import (
 )
 from .rules import CHOICES, RULE_DEFAULTS, RULE_LABELS, RULE_ORDER, validate_rule
 from .translit_presets import alphabets
+from .window_screen import observe_window_screen
 
 LABELS = {
     "match": "Match text",
@@ -285,9 +286,7 @@ class FittedFormDialog(QDialog):
         super().showEvent(event)
         self._screen_changed()
         self.fit_to_screen()
-        if self.windowHandle() and not getattr(self, "_fit_screen_connected", False):
-            self.windowHandle().screenChanged.connect(self._screen_changed)
-            self._fit_screen_connected = True
+        observe_window_screen(self, self._screen_changed)
 
     def _screen_changed(self, *_):
         screen = self.screen()
@@ -732,9 +731,7 @@ class RuleDialog(QDialog):
     def showEvent(self, event):
         super().showEvent(event)
         self._screen_changed()
-        if not getattr(self, "_screen_connected", False) and self.windowHandle():
-            self.windowHandle().screenChanged.connect(self._screen_changed)
-            self._screen_connected = True
+        observe_window_screen(self, self._screen_changed)
         self._fit_dialog()
 
     def _screen_changed(self, *_):

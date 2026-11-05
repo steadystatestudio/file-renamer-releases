@@ -81,6 +81,7 @@ from .rules import RULE_LABELS, rule_details, rule_summary
 from .storage import PresetStore, atomic_json, backup_preset, parse_preset, preset_data, read_json, restore_preset
 from .themes import apply_theme
 from .transactions import TransactionManager
+from .window_screen import observe_window_screen
 
 KOFI_URL = "https://ko-fi.com/steadystatestudio"
 FILE_COLUMN_WIDTHS = (70, 450, 130)
@@ -922,9 +923,7 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, event):
         super().showEvent(event)
-        if not getattr(self, "_screen_connected", False) and self.windowHandle():
-            self.windowHandle().screenChanged.connect(lambda *_: self.layout_timer.start(0))
-            self._screen_connected = True
+        observe_window_screen(self, self._desktop_workarea_changed)
         self._update_layout_constraints()
 
     def _startup_notice(self):
