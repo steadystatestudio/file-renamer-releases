@@ -1,4 +1,4 @@
-# Releasing File Renamer 2.2.3
+# Releasing File Renamer 2.2.4
 
 Release packages are built from an explicitly selected source commit on main.
 
@@ -11,7 +11,7 @@ repository. Package metadata uses that public repository identity.
 
 After reviewed changes are merged to main, manually dispatch **Release preparation**
 in `build-release.yml` with the exact 40-character main commit and
-`v2.2.3`. The script rejects an automatic push, another branch or unlisted repository, a
+`v2.2.4`. The script rejects an automatic push, another branch or unlisted repository, a
 reviewed-commit mismatch, a tag/version mismatch, an existing moved tag, or any
 published release. The full paginated release inventory is inspected before a
 draft is created. The workflow never publishes or changes repository visibility.

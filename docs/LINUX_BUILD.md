@@ -49,7 +49,7 @@ delete or move its virtual disk; use WSL's distribution management commands if i
 
 ## Build on an existing Ubuntu 22.04 machine
 
-Install Python 3.11+ (the validated build uses 3.12), then run from the repository root:
+Install Python 3.12+, then run from the repository root:
 
 ```sh
 sudo bash scripts/setup_linux_build.sh --system-only

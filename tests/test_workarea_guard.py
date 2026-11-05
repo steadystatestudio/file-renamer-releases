@@ -1,5 +1,8 @@
 """Verify changed work-area caps and an accessible compositor-owned fallback."""
 import importlib
+import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -187,6 +190,26 @@ def test_only_validated_wayland_constraint_requests_max_and_respects_other_state
 
 
 def test_geometry_diagnostics_are_debounced_private_and_style_neutral(monkeypatch, tmp_path):
+    # A fresh QApplication keeps other windows' legitimate queued diagnostics
+    # outside this window's exact one-write debounce assertion.
+    if os.environ.get("FILE_RENAMER_GUARD_DIAGNOSTICS_CHILD") != "1":
+        project = Path(__file__).resolve().parents[1]
+        python_path = str(project / "src")
+        if os.environ.get("PYTHONPATH"):
+            python_path += os.pathsep + os.environ["PYTHONPATH"]
+        environment = dict(os.environ, FILE_RENAMER_GUARD_DIAGNOSTICS_CHILD="1",
+                           PYTEST_DISABLE_PLUGIN_AUTOLOAD="1", QT_QPA_PLATFORM="offscreen",
+                           PYTHONPATH=python_path)
+        for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS"):
+            environment.pop(key, None)
+        completed = subprocess.run(
+            [sys.executable, "-m", "pytest", str(Path(__file__).resolve()),
+             "-k", "test_geometry_diagnostics_are_debounced_private_and_style_neutral",
+             "-q", "--basetemp=" + str(tmp_path / "fresh-process")],
+            cwd=project, env=environment, capture_output=True, text=True, timeout=15,
+        )
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        return
     import json
 
     from shiboken6 import isValid

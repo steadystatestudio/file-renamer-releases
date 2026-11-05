@@ -52,7 +52,7 @@ AppImage generation and Linux checks can also run in the included GitHub Actions
 
 ### From source
 
-Requires Python 3.11+ and Windows or Linux.
+Requires Python 3.12+ and Windows or Linux. Downloaded packages include Python.
 
 ```sh
 python -m venv .venv
