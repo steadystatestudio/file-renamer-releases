@@ -1,6 +1,6 @@
 # Changes
 
-## 2.2.6 — 2026-11-04
+## 2.2.7 — 2026-11-04
 
 - Improve automatic Linux appearance matching with independent font, light/dark and accent providers, including desktop portals, KDE, explicitly selected qt6ct and a bundled native GTK reader. Basic matching needs no installed Python or PyGObject.
 - Add saved system/custom font and accent controls, Refresh system settings and an appearance-only Reset. Appearance choices apply to all app text and Qt file/color dialogs.
