@@ -10,6 +10,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,42 @@ SOURCE = (
     if (HERE / "ewmh_workarea.c").exists()
     else HERE.parent / "scripts/native_appearance_probe.c"
 )
+
+
+def _wait_for_display(process, descriptor, stderr_path, timeout=20):
+    """Require a real bounded displayfd response and retain the startup reason."""
+    started = time.monotonic()
+    deadline = started + timeout
+    response = bytearray()
+
+    def failed(reason):
+        with stderr_path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - 16384))
+            stderr = stream.read(16384).decode("utf-8", errors="replace")
+        elapsed = time.monotonic() - started
+        raise AssertionError(
+            f"Owned Xvfb {reason}; exit={process.poll()}; elapsed={elapsed:.3f}s; stderr-tail={stderr}"
+        )
+
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            failed("exited-before-readiness")
+        remaining = max(0, deadline - time.monotonic())
+        if not select.select([descriptor], [], [], min(.05, remaining))[0]:
+            continue
+        chunk = os.read(descriptor, 32 - len(response))
+        if not chunk:
+            failed("closed-displayfd-before-readiness")
+        response.extend(chunk)
+        if b"\n" in response:
+            value = bytes(response).strip()
+            if not value.isdigit() or len(value) > 5:
+                failed("invalid-displayfd-response")
+            return ":" + value.decode("ascii")
+        if len(response) == 32:
+            failed("oversized-displayfd-response")
+    failed("readiness-timeout")
 
 
 @pytest.fixture(scope="module")
@@ -42,18 +79,18 @@ def native(tmp_path_factory):
     auth.write_bytes(struct.pack(">HHHH", 65535, 0, 0, len(name)) + name + struct.pack(">H", len(cookie)) + cookie)
     auth.chmod(0o600)
     rd, wr = os.pipe()
-    process = subprocess.Popen(
-        [server, "-displayfd", str(wr), "-screen", "0", "1280x800x24", "-nolisten", "tcp", "-auth", str(auth)],
-        pass_fds=(wr,),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    os.close(wr)
+    stderr_path = root / "xvfb-stderr.log"
+    stderr_stream = stderr_path.open("wb")
+    process, connection, lib = None, None, None
     try:
-        assert select.select([rd], [], [], 5)[0], "Owned Xvfb did not announce its display"
-        display = ":" + os.read(rd, 32).decode().strip()
-        os.close(rd)
+        try:
+            process = subprocess.Popen(
+                [server, "-displayfd", str(wr), "-screen", "0", "1280x800x24", "-nolisten", "tcp", "-auth", str(auth)],
+                pass_fds=(wr,), stdout=subprocess.DEVNULL, stderr=stderr_stream, start_new_session=True,
+            )
+        finally:
+            os.close(wr)
+        display = _wait_for_display(process, rd, stderr_path)
         env = dict(os.environ, DISPLAY=display, XAUTHORITY=str(auth))
         env.pop("LD_LIBRARY_PATH", None)
         env.pop("LD_LIBRARY_PATH_ORIG", None)
@@ -118,14 +155,19 @@ def native(tmp_path_factory):
             return json.loads(r.stdout)
 
         yield put, run
-        lib.XCloseDisplay(connection)
     finally:
-        process.terminate()
-        try:
-            process.wait(3)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(3)
+        if connection:
+            lib.XCloseDisplay(connection)
+        os.close(rd)
+        if process is not None:
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(3)
+        stderr_stream.close()
 
 
 @pytest.fixture
@@ -188,3 +230,48 @@ def test_selected_desktop_area_is_used(configured):
     put("_NET_WORKAREA", [0, 40, 1280, 760, 0, 50, 1280, 750])
     put("_NET_CURRENT_DESKTOP", [1])
     assert run()["workarea"] == [0, 50, 1280, 750]
+
+
+@pytest.mark.parametrize("response", [b"71\n", b"not-a-display\n", b""])
+def test_startup_requires_actual_valid_displayfd_bytes(tmp_path, response):
+    from types import SimpleNamespace
+
+    stderr = tmp_path / "startup.log"
+    stderr.write_bytes(b"retained startup diagnostics")
+    rd, wr = os.pipe()
+    os.write(wr, response)
+    os.close(wr)
+    try:
+        process = SimpleNamespace(poll=lambda: None)
+        if response == b"71\n":
+            assert _wait_for_display(process, rd, stderr) == ":71"
+        else:
+            with pytest.raises(AssertionError, match="displayfd"):
+                _wait_for_display(process, rd, stderr)
+    finally:
+        os.close(rd)
+
+
+def test_failed_server_reports_exit_and_bounded_stderr(tmp_path):
+    from types import SimpleNamespace
+
+    stderr = tmp_path / "startup.log"
+    stderr.write_bytes(b"omitted-prefix" + b"x" * 20000 + b" loader-failure")
+    with pytest.raises(AssertionError, match="exit=127") as failure:
+        _wait_for_display(SimpleNamespace(poll=lambda: 127), -1, stderr)
+    assert "loader-failure" in str(failure.value) and "omitted-prefix" not in str(failure.value)
+    assert len(str(failure.value)) < 16500
+
+
+def test_unresponsive_server_keeps_readiness_timeout_and_diagnostics(tmp_path):
+    from types import SimpleNamespace
+
+    stderr = tmp_path / "startup.log"
+    stderr.write_bytes(b"server-still-starting")
+    rd, wr = os.pipe()
+    try:
+        with pytest.raises(AssertionError, match="readiness-timeout.*server-still-starting"):
+            _wait_for_display(SimpleNamespace(poll=lambda: None), rd, stderr, timeout=.03)
+    finally:
+        os.close(rd)
+        os.close(wr)
