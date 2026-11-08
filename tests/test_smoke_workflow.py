@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -25,14 +26,31 @@ def test_source_smoke_renames_and_restores_synthetic_files(tmp_path):
     diagnostic = error.read_text(encoding="utf-8") if error.exists() else result.stdout + result.stderr
     assert result.returncode == 0, diagnostic
     receipt = json.loads((root / "result.json").read_text(encoding="utf-8"))
-    assert receipt["files"] == 3
+    assert receipt["files"] == 4
     assert receipt["rename"] == receipt["undo"] == "passed"
     assert receipt["rule_creation"] == receipt["rule_editing"] == "passed"
     assert receipt["created_rule_kinds"] == ["insert", "replace"]
     assert receipt["tiff_metadata"] == "passed" and receipt["tiff_original_unchanged"]
+    assert receipt["flac_metadata"] == "passed" and receipt["flac_original_unchanged"]
+    assert "01. Synthetic Song.flac" in receipt["hashes_before"]
     assert receipt["hashes_before"] == receipt["hashes_after"]
     assert receipt["case_apostrophes_preview_rename_undo"] == "passed"
     assert not (root / "application.lock").exists()
+
+
+@pytest.mark.parametrize("title", [None, "Synthetic FLAC", "Café — 合成音楽"])
+def test_flac_fixture_decodes_to_complete_synthetic_audio(title):
+    from file_renamer.smoke import flac_fixture
+
+    decoder = shutil.which("ffmpeg")
+    if decoder is None:
+        pytest.skip("Independent FLAC decoder ffmpeg is not installed")
+    result = subprocess.run(
+        [decoder, "-v", "error", "-xerror", "-f", "flac", "-i", "pipe:0", "-f", "s16le", "pipe:1"],
+        input=flac_fixture(title), capture_output=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
+    assert result.stdout == b"\0" * 320
 
 
 @pytest.mark.parametrize("mode", ["--smoke-workflow", "--smoke-ui", "--qa-ui"])

@@ -430,6 +430,16 @@ class FileProgressBar(QProgressBar):
         painter.drawText(text_area, Qt.AlignCenter, text)
 
 
+HIDDEN_NAME_WARNING = (
+    "The new filename starts with a dot. Linux file managers hide these names; "
+    "press Ctrl+H to show them. Undo can restore the original filename."
+)
+
+
+def hidden_output(row):
+    return bool(row and row.changed and Path(row.destination).name.startswith("."))
+
+
 class FileTableModel(QAbstractTableModel):
     changed = Signal()
     HEADERS = ("State", "Name", "Status")
@@ -469,8 +479,12 @@ class FileTableModel(QAbstractTableModel):
         if role == Qt.ForegroundRole:
             if planned and planned.error and entry.included:
                 return QColor("#e66c6c" if QApplication.instance().property("dark") else "#ad3030")
+            if column == 2 and hidden_output(planned):
+                return QColor("#e9b75c" if QApplication.instance().property("dark") else "#805500")
             if column == 1 and planned and planned.changed:
                 return proposed_name_color()
+        if role in {Qt.ToolTipRole, Qt.AccessibleDescriptionRole} and hidden_output(planned):
+            return HIDDEN_NAME_WARNING
         if role == Qt.UserRole + 1:
             return bool(planned and planned.error and entry.included)
         if role == Qt.UserRole and column == 1:
@@ -487,7 +501,9 @@ class FileTableModel(QAbstractTableModel):
                 return f"{original}\n{new}"
             status = "Skipped" if not entry.included else self.results.get(entry.path, "Preview pending")
             if planned and entry.included:
-                status = planned.error or ("Ready" if planned.changed else "Unchanged")
+                status = planned.error or (
+                    "Hidden on Linux" if hidden_output(planned) else "Ready" if planned.changed else "Unchanged"
+                )
             return visible_text(("", "", status)[column])
         return None
 
@@ -798,6 +814,9 @@ class MainWindow(QMainWindow):
             reason = "No filename changes"
         else:
             reason = f"Rename {len(self.model.plan.changes):,} files · F6"
+            hidden = sum(hidden_output(row) for row in self.model.plan.files)
+            if hidden:
+                reason += f" · Warning: {hidden:,} hidden on Linux"
         self.rename.setToolTip(reason)
 
     def _set_status(self, message):
@@ -1433,6 +1452,7 @@ class MainWindow(QMainWindow):
                 if plan.revision == self.revision:
                     self.model.show_plan(plan)
                     changes, errors = len(plan.changes), len(plan.errors)
+                    hidden = sum(hidden_output(row) for row in plan.files)
                     self.progress.preview(changes, f"{changes:,} files to rename" if changes else "No files to rename")
                     unchanged = sum(row.entry.included and not row.error and not row.changed for row in plan.files)
                     self.rename.setToolTip(f"Rename {changes:,} files · F6")
@@ -1443,6 +1463,7 @@ class MainWindow(QMainWindow):
                         if self.recovery_required
                         else f"{changes:,} ready to rename  ·  {unchanged:,} unchanged  ·  {errors:,} errors"
                         + getattr(self, "collection_note", "")
+                        + (f"  ·  Warning: {hidden:,} hidden on Linux (Ctrl+H to show)" if hidden else "")
                         + ("  — Fix errors or uncheck those files." if errors else "")
                     )
         except Exception as exc:

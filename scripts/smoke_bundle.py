@@ -14,7 +14,7 @@ from pathlib import Path
 
 from file_renamer.filesystem import regular_identity
 from file_renamer.models import FileEntry, RuleSpec
-from file_renamer.smoke import tiff_fixture
+from file_renamer.smoke import flac_fixture, tiff_fixture
 
 
 def image_fixture() -> bytes:
@@ -95,6 +95,20 @@ def main():
         row = response["plan"]["files"][0]
         assert row["destination"].endswith("2_3_StudioQA_picture.tif") and not row["error"], response
         assert picture.read_bytes() == tiff_fixture()
+        flac = root / "synthetic_track.flac"
+        flac_bytes = flac_fixture()
+        flac.write_bytes(flac_bytes)
+        request["entries"] = [asdict(FileEntry(str(flac), regular_identity(flac)))]
+        request["rules"] = [asdict(RuleSpec("insert", behavior="renamer", options={
+            "text": ":FLAC_Title:_:FLAC_Artist:_"}))]
+        (root / "request.json").write_text(json.dumps(request), encoding="utf-8")
+        result = subprocess.run(command, timeout=30, cwd=root, **options)
+        assert result.returncode == 0, result.returncode
+        response = json.loads((root / "response.json").read_text(encoding="utf-8"))
+        row = response["plan"]["files"][0]
+        expected_flac = root / "Synthetic FLAC_Synthetic Artist_synthetic_track.flac"
+        assert row["destination"] == str(expected_flac) and not row["error"], response
+        assert flac.read_bytes() == flac_bytes and not expected_flac.exists()
         environment = dict(os.environ, QT_QPA_PLATFORM=os.environ.get("FILE_RENAMER_SMOKE_PLATFORM", "offscreen"))
         result = subprocess.run(
             [str(executable), "--smoke-workflow", str(root / "ui-check")],
@@ -110,6 +124,8 @@ def main():
         assert receipt["rule_creation"] == receipt["rule_editing"] == "passed"
         assert receipt["created_rule_kinds"] == ["insert", "replace"]
         assert receipt["tiff_metadata"] == "passed" and receipt["tiff_original_unchanged"]
+        assert receipt["flac_metadata"] == "passed" and receipt["flac_original_unchanged"]
+        assert receipt["hashes_before"]["01. Synthetic Song.flac"] == receipt["hashes_after"]["01. Synthetic Song.flac"]
         assert receipt["hashes_before"] == receipt["hashes_after"] and receipt["originals_unchanged"]
         assert not (root / "ui-check/application.lock").exists()
         if len(sys.argv) > 2:
@@ -118,7 +134,7 @@ def main():
             evidence.mkdir(parents=True, exist_ok=False)
             for name in ("ui.png", "ui-preview.png", "result.json"):
                 shutil.copy2(root / "ui-check" / name, evidence / name)
-    print("Packaged GUI, preview helpers, rename and Undo passed; original names and contents restored.")
+    print("Packaged GUI, FLAC metadata, preview helpers, rename and Undo passed; original names and contents restored.")
 
 
 if __name__ == "__main__":

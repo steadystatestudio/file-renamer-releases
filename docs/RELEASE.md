@@ -1,4 +1,4 @@
-# Releasing File Renamer 2.2.8
+# Releasing File Renamer 2.2.9
 
 Release packages are built from an explicitly selected source commit on main.
 
@@ -11,7 +11,7 @@ repository. Package metadata uses that public repository identity.
 
 After reviewed changes are merged to main, manually dispatch **Release preparation**
 in `build-release.yml` with the exact 40-character main commit and
-`v2.2.8`. The script rejects an automatic push, another branch or unlisted repository, a
+`v2.2.9`. The script rejects an automatic push, another branch or unlisted repository, a
 reviewed-commit mismatch, a tag/version mismatch, an existing moved tag, or any
 published release. The full paginated release inventory is inspected before a
 draft is created. The workflow never publishes or changes repository visibility.
@@ -25,12 +25,14 @@ Workflows for the same release tag are serialized.
 Both Windows Server 2022 and Ubuntu 22.04 must pass the full source suite, build
 native packages, and run the actual packaged preview helpers and GUI rename/Undo
 workflow. The diagnostic creates and edits rules through the Add Rule/Edit dialogs,
-then creates three synthetic files in a fresh folder, checks
+then creates four synthetic files in a fresh folder, checks
 the preview, renames through the real UI, undoes the batch, and verifies original
 names and SHA-256 hashes. It refuses an existing destination. Native smoke reports
 and screenshots are retained without synthetic input files or local settings.
-The inputs include a real TIFF. Packaged preview and GUI checks require its
-dimensions/model metadata and verify its content survives Rename and Undo.
+The inputs include a real TIFF and a valid synthetic FLAC. Packaged preview and
+GUI checks require image dimensions/model metadata and FLAC Title/Artist, and
+verify complete-file hashes survive Rename and Undo. Platform receipts require
+FLAC preservation evidence before finalization.
 
 Ubuntu 24.04 then downloads the retained Ubuntu 22.04 portable bundle and AppImage.
 It verifies their exact receipt, source identity and hashes before running the same

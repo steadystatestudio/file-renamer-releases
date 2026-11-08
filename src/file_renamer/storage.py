@@ -13,33 +13,87 @@ from .models import RuleSpec
 from .registry import defaults_for
 from .rules import validate_rule
 
+MAX_JSON_BYTES = 32 * 1024 * 1024
+
+
+def sync_directory(path: Path) -> None:
+    """Persist directory entries without opening unrelated ancestors."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def ensure_directory(path: Path, *, exist_ok: bool = True) -> None:
+    """Create a durable hierarchy, stopping at the first existing directory."""
+    directory = path.absolute()
+    missing = []
+    while not directory.exists():
+        missing.append(directory)
+        if directory.parent == directory:
+            break  # Let mkdir report an unavailable drive/share root.
+        directory = directory.parent
+    if not missing:
+        path.mkdir(exist_ok=exist_ok)
+        return
+    created = []
+    try:
+        for directory in reversed(missing):
+            try:
+                directory.mkdir()
+            except FileExistsError:
+                if (directory == path.absolute() and not exist_ok) or not directory.is_dir():
+                    raise
+            else:
+                created.append(directory)
+        # Each new directory and its name in its direct parent must survive.
+        # Existing ancestors above that parent are outside this operation.
+        required = dict.fromkeys(parent for directory in reversed(created) for parent in (directory, directory.parent))
+        for parent in required:
+            sync_directory(parent)
+    except OSError:
+        # An unsynced empty hierarchy must not appear prepared on a retry.
+        # Remove only directories this call created; never remove contents.
+        for directory in reversed(created):
+            try:
+                directory.rmdir()
+            except OSError:
+                break
+        raise
+
+
+def serialize_json(data: dict) -> str:
+    """Reject snapshots that the reader could not reopen, before touching disk."""
+    text = json.dumps(data, ensure_ascii=True, indent=2)
+    if len(text.encode("utf-8")) > MAX_JSON_BYTES:
+        raise ValueError(f"Data file is too large (maximum {MAX_JSON_BYTES} bytes)")
+    return text
+
 
 def atomic_json(path: Path, data: dict) -> None:
-    atomic_text(path, json.dumps(data, ensure_ascii=True, indent=2))
+    atomic_text(path, serialize_json(data))
 
 
 def atomic_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(path.parent)
     descriptor, temporary = tempfile.mkstemp(prefix=".renamer-", suffix=".json", dir=path.parent)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
-        if os.name != "nt":
-            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+        sync_directory(path.parent)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
 
 
 def read_json(path: Path) -> dict:
-    if path.stat().st_size > 32 * 1024 * 1024:
+    if path.stat().st_size > MAX_JSON_BYTES:
         raise ValueError("Data file is too large")
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
@@ -122,7 +176,7 @@ def backup_preset(path: Path, name: str, rules: list[RuleSpec]) -> None:
 
 
 def restore_preset(path: Path) -> tuple[str, list[RuleSpec]]:
-    if path.stat().st_size > 32 * 1024 * 1024:
+    if path.stat().st_size > MAX_JSON_BYTES:
         raise ValueError("Data file is too large")
     if path.suffix.lower() == ".json":
         data = read_json(path)

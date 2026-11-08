@@ -37,6 +37,7 @@ def main() -> int:
     from .appearance import prepare_initial_appearance, prepare_window_for_show
     from .application_paths import application_data_dir, application_settings, configure_application
     from .gui import MainWindow
+    from .storage import ensure_directory
 
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
     app = QApplication(sys.argv)
@@ -48,7 +49,7 @@ def main() -> int:
     try:
         isolated_dir = _isolated_data_directory(sys.argv[2]) if isolated_mode else None
         data_dir = isolated_dir or application_data_dir()
-        data_dir.mkdir(parents=True, exist_ok=isolated_dir is None)
+        ensure_directory(data_dir, exist_ok=isolated_dir is None)
     except (OSError, ValueError) as exc:
         if isolated_mode is None:
             raise

@@ -1299,3 +1299,48 @@ def test_help_uses_current_version_and_rule_syntax(window, monkeypatch):
     assert 'New rules use one-based positions' in shown[0]
     assert '$1 inserts the first capture group' in shown[0]
     assert 'Legacy presets keep zero-based positions and Python regex' in shown[0]
+
+
+def test_hidden_flac_preview_warns_before_rename_and_undo(app, window, make_entry):
+    from file_renamer.smoke import flac_fixture
+
+    audio = flac_fixture(title="Hidden-name preview")
+    entry = make_entry("01. Song.flac", audio)
+    window.rules = [RuleSpec("insert", options={"text": "."})]
+    window._fill_rules()
+    window.add_paths([entry.path])
+    wait_until(app, lambda: window.model.plan is not None)
+    status = window.model.index(0, 2)
+    assert window.model.data(status) == "Hidden on Linux"
+    assert "Ctrl+H" in window.model.data(status, Qt.ToolTipRole)
+    assert "Linux file managers hide" in window.model.data(status, Qt.AccessibleDescriptionRole)
+    assert "Warning: 1 hidden on Linux" in window.progress.text()
+    assert "Warning" in window.rename.toolTip()
+    assert window.rename.isEnabled() and not window.model.plan.errors
+    destination = Path(window.model.plan.files[0].destination)
+    window.rename.click()
+    wait_until(app, lambda: not window.busy)
+    assert destination.read_bytes() == audio
+    window.undo.click()
+    wait_until(app, lambda: not window.busy)
+    assert Path(entry.path).read_bytes() == audio
+
+
+def test_hidden_name_warning_preserves_errors_and_exclusions(app, make_entry):
+    from dataclasses import replace
+
+    from file_renamer.gui import FileTableModel
+    from file_renamer.models import PlannedFile, RenamePlan
+
+    entry = make_entry("song.flac")
+    destination = str(Path(entry.path).with_name(".song.flac"))
+    model = FileTableModel()
+    model.reset_entries([entry])
+    model.show_plan(RenamePlan(1, (PlannedFile(entry, destination, "Destination already exists"),)))
+    assert model.data(model.index(0, 2)) == "Destination already exists"
+    assert model.data(model.index(0, 2), Qt.ToolTipRole) is None
+    excluded = replace(entry, included=False)
+    model.reset_entries([excluded])
+    model.show_plan(RenamePlan(2, (PlannedFile(excluded, destination),)))
+    assert model.data(model.index(0, 2)) == "Skipped"
+    assert model.data(model.index(0, 2), Qt.ToolTipRole) is None

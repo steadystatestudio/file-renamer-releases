@@ -112,7 +112,8 @@ def test_smoke_receipt_requires_unchanged_hashes(tmp_path):
     data = dict(success=True, rename='passed', undo='passed', originals_unchanged=True,
                 hashes_before={'file': 'a'}, hashes_after={'file': 'b'},
                 rule_creation='passed', rule_editing='passed', created_rule_kinds=['insert', 'replace'],
-                tiff_metadata='passed', tiff_original_unchanged=True)
+                tiff_metadata='passed', tiff_original_unchanged=True,
+                flac_metadata='passed', flac_original_unchanged=True)
     receipt.write_text(json.dumps(data))
     with pytest.raises(ValueError, match='verification'):
         stage.check_smoke_report(receipt)
@@ -134,7 +135,10 @@ def test_smoke_receipt_requires_editor_creation_and_editing(tmp_path):
     with pytest.raises(ValueError, match='rule creation'):
         stage.check_smoke_report(receipt)
     data.update(rule_creation='passed', rule_editing='passed', created_rule_kinds=['insert', 'replace'])
-    data.update(tiff_metadata='passed', tiff_original_unchanged=True)
+    data.update(tiff_metadata='passed', tiff_original_unchanged=True,
+                flac_metadata='passed', flac_original_unchanged=True)
+    data['hashes_before']['01. Synthetic Song.flac'] = 'flac hash'
+    data['hashes_after']['01. Synthetic Song.flac'] = 'flac hash'
     receipt.write_text(json.dumps(data))
     assert stage.check_smoke_report(receipt) == data
     for key in ('rule_creation', 'rule_editing', 'created_rule_kinds', 'tiff_metadata', 'tiff_original_unchanged'):
@@ -143,13 +147,37 @@ def test_smoke_receipt_requires_editor_creation_and_editing(tmp_path):
             stage.check_smoke_report(receipt)
 
 
+@pytest.mark.parametrize('mutation', [
+    {'flac_metadata': None},
+    {'flac_metadata': 'failed'},
+    {'flac_original_unchanged': None},
+    {'flac_original_unchanged': False},
+    {'hashes_before': {'file': 'a'}, 'hashes_after': {'file': 'a'}},
+    {'hashes_after': {'file': 'a', '01. Synthetic Song.flac': 'changed'}},
+])
+def test_smoke_receipt_requires_real_flac_metadata_and_preservation(tmp_path, mutation):
+    stage = module('stage_candidate')
+    receipt = tmp_path / 'result.json'
+    data = dict(success=True, rename='passed', undo='passed', originals_unchanged=True,
+                hashes_before={'file': 'a', '01. Synthetic Song.flac': 'flac hash'},
+                hashes_after={'file': 'a', '01. Synthetic Song.flac': 'flac hash'},
+                rule_creation='passed', rule_editing='passed', created_rule_kinds=['insert', 'replace'],
+                tiff_metadata='passed', tiff_original_unchanged=True,
+                flac_metadata='passed', flac_original_unchanged=True)
+    receipt.write_text(json.dumps(data), encoding='utf-8')
+    assert stage.check_smoke_report(receipt) == data
+    receipt.write_text(json.dumps(data | mutation), encoding='utf-8')
+    with pytest.raises(ValueError, match='verification'):
+        stage.check_smoke_report(receipt)
+
+
 def linux_receipt(stage, directory):
     names = ['File-Renamer-linux-x86_64.tar.gz', 'File-Renamer-x86_64.AppImage',
              'BUILD-INFO-Linux.json', 'QA-Linux.zip', 'SHA256SUMS-Linux.txt']
     for name in names:
         (directory / name).write_bytes(name.encode())
     return dict(source_commit='a' * 40, source_tree='b' * 40, platform='Linux', run_id='123',
-                native_smoke='passed', rule_editor_smoke='passed',
+                native_smoke='passed', rule_editor_smoke='passed', flac_preservation_smoke='passed',
                 files=[stage.record(directory / name) for name in names])
 
 
@@ -159,7 +187,7 @@ def test_retained_linux_receipt_requires_exact_source_run_and_complete_asset_set
     receipt = linux_receipt(stage, tmp_path)
     stage.check_receipt(receipt, 'a' * 40, 'b' * 40, 'Linux')
     for mutation in (dict(source_commit='c' * 40), dict(source_tree='c' * 40), dict(run_id='124'),
-                     dict(platform='Windows'), dict(rule_editor_smoke=None),
+                     dict(platform='Windows'), dict(rule_editor_smoke=None), dict(flac_preservation_smoke=None),
                      dict(files=receipt['files'][:-1]), dict(files=receipt['files'] + receipt['files'][:1])):
         with pytest.raises(ValueError):
             stage.check_receipt(receipt | mutation, 'a' * 40, 'b' * 40, 'Linux')

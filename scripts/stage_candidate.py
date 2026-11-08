@@ -155,7 +155,9 @@ def check_smoke_report(path):
             or not data.get("hashes_before") or data["hashes_before"] != data.get("hashes_after")
             or data.get("rule_creation") != "passed" or data.get("rule_editing") != "passed"
             or data.get("created_rule_kinds") != ["insert", "replace"]
-            or data.get("tiff_metadata") != "passed" or data.get("tiff_original_unchanged") is not True):
+            or data.get("tiff_metadata") != "passed" or data.get("tiff_original_unchanged") is not True
+            or data.get("flac_metadata") != "passed" or data.get("flac_original_unchanged") is not True
+            or "01. Synthetic Song.flac" not in data["hashes_before"]):
         raise ValueError("Packaged rule creation, rename and Undo verification is missing or failed")
     return data
 
@@ -197,8 +199,9 @@ def check_receipt(receipt, commit, tree, platform):
     if len(names) != len(set(names)) or set(names) != expected:
         raise ValueError('Release receipt has missing, duplicate or unexpected assets')
     if platform != 'Sources' and (receipt.get('native_smoke') != 'passed'
-                                  or receipt.get('rule_editor_smoke') != 'passed'):
-        raise ValueError('Receipt lacks packaged editor workflow evidence')
+                                  or receipt.get('rule_editor_smoke') != 'passed'
+                                  or receipt.get('flac_preservation_smoke') != 'passed'):
+        raise ValueError('Receipt lacks packaged editor or FLAC preservation workflow evidence')
 
 
 def download_assets(names, directory):
@@ -346,6 +349,7 @@ def stage(platform):
         'run_id': os.environ['GITHUB_RUN_ID'], 'files': [record(path) for path in files],
         'native_smoke': 'passed' if platform != 'Sources' else None,
         'rule_editor_smoke': 'passed' if platform != 'Sources' else None,
+        'flac_preservation_smoke': 'passed' if platform != 'Sources' else None,
         'verified_inputs': inputs,
     })
     upload(files)

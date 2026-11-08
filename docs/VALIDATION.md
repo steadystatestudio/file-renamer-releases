@@ -14,6 +14,15 @@ system-library closure below describe the older package only. Automated headless
 checks do not certify interactive Windows 10/11, physical high-DPI hardware,
 Wayland, accessibility or every filesystem.
 
+## 2.2.9 recovery and preview checks
+
+The release uses generated synthetic fixtures for interrupted recovery, legacy
+snapshot limits, hidden-name warnings and FLAC metadata/content preservation.
+See [recovery and preview validation](RECOVERY_VALIDATION.md) for scope and
+limits. Exact release receipts, rather than an earlier candidate run, identify
+completed Windows, Ubuntu and retained-package checks. New native-desktop manual
+acceptance is not claimed.
+
 ---
 
 # 2.0.4 rule-editor restoration

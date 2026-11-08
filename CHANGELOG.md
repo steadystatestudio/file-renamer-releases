@@ -1,5 +1,15 @@
 # Changes
 
+## 2.2.9 — 2026-11-08
+
+- Check source-folder directory syncing before staging filenames, preserving originals and prior Undo when the filesystem rejects syncing.
+- Persist the recovery log and newly created data-folder hierarchy before moving any source. Preserve prior Undo if recovery preparation fails.
+- Add genuine synthetic FLAC metadata and content-preservation checks to source and packaged Rename/Undo workflows; require their evidence in release receipts.
+- Reject recovery snapshots larger than the reader supports before changing filenames; keep recoverable state when a later checkpoint exceeds the limit.
+- Recover valid interrupted 2.2.8 batches whose replay exceeds the snapshot limit by keeping durable status events in the existing log.
+- Warn in the preview, status and tooltips before a filename will be hidden on Linux; keep intentional renames available.
+- Verify real FLAC albums through cancellation, destination conflicts and abrupt process exits at each staging/final move.
+
 ## 2.2.8 — 2026-11-04
 
 - Improve automatic Linux appearance matching with independent font, light/dark and accent providers, including desktop portals, KDE, explicitly selected qt6ct and a bundled native GTK reader. Basic matching needs no installed Python or PyGObject.

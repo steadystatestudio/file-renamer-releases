@@ -21,6 +21,27 @@ def tiff_fixture() -> bytes:
             + struct.pack("<I", 0) + model + b"\0" + bytes([0, 50, 100, 150, 200, 255]))
 
 
+def flac_fixture(title: str | None = "Synthetic FLAC", artist: str | None = "Synthetic Artist") -> bytes:
+    """A real 20 ms FLAC: 160 silent 16-bit mono samples at 8 kHz.
+
+    The fixed encoded audio frame has valid header/frame CRCs. STREAMINFO records
+    its exact sample count and decoded-audio MD5; Vorbis comments are UTF-8. No
+    host encoder, decoder or audio library is needed to create the fixture.
+    """
+    pcm = b"\0" * 320
+    frame = bytes.fromhex("fff86408009f37000000412d")
+    streaminfo = (struct.pack(">HH", 160, 160) + len(frame).to_bytes(3, "big") * 2
+                  + ((8000 << 44) | (15 << 36) | 160).to_bytes(8, "big")
+                  + hashlib.md5(pcm, usedforsecurity=False).digest())
+    vendor = b"File Renamer synthetic fixture"
+    comments = [f"{key}={value}".encode("utf-8") for key, value in (("TITLE", title), ("ARTIST", artist))
+                if value is not None]
+    vorbis = (struct.pack("<I", len(vendor)) + vendor + struct.pack("<I", len(comments))
+              + b"".join(struct.pack("<I", len(comment)) + comment for comment in comments))
+    return (b"fLaC\0" + len(streaminfo).to_bytes(3, "big") + streaminfo
+            + b"\x84" + len(vorbis).to_bytes(3, "big") + vorbis + frame)
+
+
 def run(app, window, root: Path) -> None:
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QDialog, QMessageBox, QPushButton
@@ -35,6 +56,7 @@ def run(app, window, root: Path) -> None:
         "blue_jacket.JPG": b"synthetic blue jacket\n",
         "café_02.txt": b"synthetic unicode filename\n",
         "photo_10.tif": tiff_fixture(),
+        "01. Synthetic Song.flac": flac_fixture(),
     }
     for name, content in originals.items():
         (inputs / name).write_bytes(content)
@@ -44,6 +66,9 @@ def run(app, window, root: Path) -> None:
     assert metadata.get("Image_Width", tiff) == "2"
     assert metadata.get("Image_Height", tiff) == "3"
     assert metadata.get("TIFF_Model", tiff) == "StudioQA"
+    flac = str(inputs / "01. Synthetic Song.flac")
+    assert metadata.get("FLAC_Title", flac) == "Synthetic FLAC"
+    assert metadata.get("FLAC_Artist", flac) == "Synthetic Artist"
     messages = []
     window._message = lambda title, message: messages.append((title, message))
 
@@ -155,6 +180,8 @@ def run(app, window, root: Path) -> None:
         "rename": "passed", "undo": "passed", "originals_unchanged": True,
         "rule_creation": "passed", "rule_editing": "passed", "created_rule_kinds": ["insert", "replace"],
         "tiff_metadata": "passed", "tiff_original_unchanged": after["photo_10.tif"] == before["photo_10.tif"],
+        "flac_metadata": "passed",
+        "flac_original_unchanged": after["01. Synthetic Song.flac"] == before["01. Synthetic Song.flac"],
         "hashes_before": before, "hashes_after": after,
         "case_apostrophes_preview_rename_undo": "passed",
     }, indent=2) + "\n", encoding="utf-8")

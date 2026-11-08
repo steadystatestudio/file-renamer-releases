@@ -46,10 +46,30 @@ jobs:
       - run: python scripts/build.py
       - name: Smoke test Windows executable
         if: runner.os == 'Windows'
-        run: python scripts/smoke_bundle.py dist/File-Renamer/File-Renamer.exe
+        run: python scripts/smoke_bundle.py dist/File-Renamer/File-Renamer.exe artifacts/smoke-windows
       - name: Smoke test Linux executable
         if: runner.os == 'Linux'
         run: |
-          python scripts/smoke_bundle.py dist/File-Renamer/File-Renamer
-          APPIMAGE_EXTRACT_AND_RUN=1 python scripts/smoke_bundle.py dist/File-Renamer-x86_64.AppImage
-          FILE_RENAMER_SMOKE_PLATFORM=xcb APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a python scripts/smoke_bundle.py dist/File-Renamer-x86_64.AppImage
+          python scripts/smoke_bundle.py dist/File-Renamer/File-Renamer artifacts/smoke-bundle
+          APPIMAGE_EXTRACT_AND_RUN=1 python scripts/smoke_bundle.py dist/File-Renamer-x86_64.AppImage artifacts/smoke-appimage
+          FILE_RENAMER_SMOKE_PLATFORM=xcb APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a python scripts/smoke_bundle.py dist/File-Renamer-x86_64.AppImage artifacts/smoke-x11
+      - name: Preserve exact review source
+        run: git archive --format=zip --output=artifacts/review-source.zip HEAD
+      - name: Retain private review packages and evidence
+        if: github.repository == 'steadystatestudio/file-renamer-builds' && github.event.repository.private == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: File-Renamer-review-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.AppImage
+            dist/BUILD-INFO.json
+            dist/SHA256SUMS
+            artifacts/tests.xml
+            artifacts/review-source.zip
+            artifacts/smoke-*/result.json
+            artifacts/smoke-*/ui.png
+            artifacts/smoke-*/ui-preview.png
