@@ -14,6 +14,13 @@ system-library closure below describe the older package only. Automated headless
 checks do not certify interactive Windows 10/11, physical high-DPI hardware,
 Wayland, accessibility or every filesystem.
 
+## 2.3.0 hidden-name and stranded-file checks
+
+Synthetic tests cover blocked dot-leading results, direct moves, visible staging
+names, changing file identities, best-effort Undo and recovery of batches left by
+2.2.8/2.2.9. See [recovery and preview validation](RECOVERY_VALIDATION.md) for the
+manual FAT-image runs and their limits.
+
 ## 2.2.9 recovery and preview checks
 
 The release uses generated synthetic fixtures for interrupted recovery, legacy

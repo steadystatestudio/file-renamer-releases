@@ -1,5 +1,22 @@
 # Recovery and preview validation
 
+## Version 2.3.0
+
+This release follows a report that 2.2.8 "deleted" FLAC files on Linux Mint. No
+release overwrites or deletes file contents, but two faults could leave files
+hidden. Both were reproduced before being corrected:
+
+- Removing the digits from `01. Title.flac` produced `. Title.flac`, which Linux
+  file managers hide and this app would not load again. Such results are now blocked.
+- On a loop-mounted FAT image, dropping the kernel caches between the two rename
+  phases changed every file's inode number. 2.2.9 then left all 400 test files under
+  hidden `.file-renamer-<id>.tmp` names and Recover refused. With this release the
+  same batch completes, and Recover restores the 400 files stranded by 2.2.9.
+
+Automated tests cover these cases with simulated changing file identities on the
+test filesystem. The FAT image runs were manual, on WSL 2 with Ubuntu 22.04. exFAT,
+NTFS mounts, network folders and physical removable drives were not exercised.
+
 ## Version 2.2.9
 
 This release strengthens interrupted-rename recovery and preview warnings.

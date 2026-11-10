@@ -213,24 +213,32 @@ Unsaved rule changes retain the preset name with `(modified)`.
   names, and filename length. Execution checks again before it starts.
 - Native no-replace moves prevent destination overwrites: Windows rename and
   Linux `renameat2(RENAME_NOREPLACE)`. Unsupported Linux filesystems fail safely.
-- Files first move to unique temporary names in the same folder, allowing swaps,
-  cycles, and case-only changes without replacing other files.
+- Each file moves straight to its new name. Only swaps, cycles, and case-only
+  changes pass through a temporary name in the same folder, one file per cycle.
+  That name is visible and keeps the original stem and extension
+  (`Title.file-renamer-<id>.flac`).
+- A new name that would start with a dot is blocked in the preview. File managers
+  hide such names and this app does not load hidden files.
 - A durable snapshot plus append-only event log records each move's intent and
   completion. A failure stops the batch and attempts rollback.
-- An interrupted batch exposes **RECOVER** on restart. Missing, edited,
-  or replaced files and occupied original names stop recovery; resolve the stated
-  problem and retry. The result dialog lists unresolved paths and the journal location.
+- An interrupted batch exposes **RECOVER** on restart. Recover and Undo restore
+  every file they can. A missing, edited, or replaced file, or an occupied original
+  name, is reported and left where it is; resolve the stated problem and retry.
+  The result dialog lists unresolved paths and the journal location.
+- Recover also restores batches that 2.2.8 or 2.2.9 left under hidden
+  `.file-renamer-<id>.tmp` names, using the existing journal.
 - The most recent batch is undoable. Starting another batch replaces that history.
   Keep `last-rename.json` **and** `last-rename.log` together until recovery is complete.
 - A process lock prevents two GUI instances from sharing the same journal.
 
 This is a sequence of filesystem operations, not a filesystem-wide atomic transaction.
 External changes and storage failures can require recovery. Avoid editing or moving
-the files while a batch is running. Identity checks use device/inode, size, and
-modification time; they are not cryptographic content checks. Windows collision
+the files while a batch is running. Identity checks use size and modification
+time, plus device/inode on filesystems where those are permanent (not FAT, exFAT,
+network or FUSE folders); they are not cryptographic content checks. Windows collision
 checks are conservatively case-insensitive, even in case-sensitive directories.
-Linux case-folding flags are detected where supported; the native no-replace call
-is the final authority on collisions. Network filesystems must support that operation.
+Linux case-folding flags are detected where supported, and other folders are probed
+directly; the native no-replace call is the final authority on collisions. Network filesystems must support that operation.
 
 Preferences use Qt's user INI settings location. Presets and journals use
 `QStandardPaths.AppLocalDataLocation` (typically `%LOCALAPPDATA%/Steady State Studio/File Renamer`

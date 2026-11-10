@@ -1,6 +1,6 @@
 # Changes
 
-## Unreleased
+## 2.3.0 — 2026-11-09
 
 Prompted by a report that 2.2.8 "deleted" FLAC files on Linux Mint. No release overwrites or deletes file contents, but two faults could leave files hidden so they appeared to be gone. Both are reproduced in tests and corrected.
 
