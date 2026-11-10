@@ -149,7 +149,7 @@ def run(app, window, root: Path) -> None:
     after = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs.iterdir()}
     assert before == after
     assert window.manager.load()["status"] == "undone"
-    assert not list(inputs.glob(".file-renamer-*.tmp"))
+    assert not list(inputs.glob("*.file-renamer-*"))
     assert window.grab().save(str(root / "ui.png"))
     # The exact frozen application must also preserve apostrophes through its
     # real Case editor, preview worker, filesystem operation and recovery path.

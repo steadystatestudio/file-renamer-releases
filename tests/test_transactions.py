@@ -64,7 +64,7 @@ def test_cancel_rolls_back(make_entry, tmp_path):
     result = manager.execute(plan, lambda: cancel[0], lambda *_: cancel.__setitem__(0, True))
     assert not result.success and not result.recovery_required
     assert all(Path(entry.path).exists() for entry in entries)
-    assert not list(tmp_path.glob(".file-renamer-*.tmp"))
+    assert not list(tmp_path.glob("*.file-renamer-*"))
 
 
 def test_permission_failure_rolls_back(make_entry, tmp_path, monkeypatch):
@@ -136,7 +136,8 @@ def test_corrupt_journal_blocks_mutation(make_entry, tmp_path):
     assert Path(entry.path).exists()
 
 
-@pytest.mark.parametrize("crash_after", range(1, 7))
+# One file is staged to open the cycle, then each of the three moves once.
+@pytest.mark.parametrize("crash_after", range(1, 5))
 def test_recover_every_phase_of_three_file_cycle(make_entry, tmp_path, monkeypatch, crash_after):
     entries = [make_entry(f"{i}.txt", str(i).encode()) for i in range(3)]
     plan = RenamePlan(1, tuple(PlannedFile(entry, entries[(i + 1) % 3].path) for i, entry in enumerate(entries)))
@@ -156,7 +157,7 @@ def test_recover_every_phase_of_three_file_cycle(make_entry, tmp_path, monkeypat
     result = TransactionManager(journal).restore()
     assert result.success, result.message
     assert all(Path(entry.path).read_bytes() == str(i).encode() for i, entry in enumerate(entries))
-    assert not list(tmp_path.glob(".file-renamer-*.tmp"))
+    assert not list(tmp_path.glob("*.file-renamer-*"))
 
 
 def test_completion_log_failure_and_torn_tail(make_entry, tmp_path, monkeypatch):
@@ -203,10 +204,14 @@ def test_hidden_source_rechecked_before_execute(make_entry, tmp_path, monkeypatc
     assert not Path(plan.files[0].destination).exists()
 
 
-def test_undo_can_restore_hidden_destination(make_entry, tmp_path):
+def test_undo_can_restore_hidden_destination(make_entry, tmp_path, monkeypatch):
+    # New batches cannot create a dot-leading name; one made by an earlier release must stay undoable.
     entry = make_entry("original.txt")
-    plan = build_plan([entry], [RuleSpec("insert", options={"text": "."})])
+    plan = RenamePlan(1, (PlannedFile(entry, str(Path(entry.path).with_name(".original.txt"))),))
     manager = TransactionManager(tmp_path / "journal.json")
-    assert manager.execute(plan).success
+    assert not manager.execute(plan).success
+    with monkeypatch.context() as patch:
+        patch.setattr("file_renamer.transactions.validate_plan", lambda value: value)
+        assert manager.execute(plan).success
     assert manager.restore().success
     assert Path(entry.path).read_bytes() == b"test content"

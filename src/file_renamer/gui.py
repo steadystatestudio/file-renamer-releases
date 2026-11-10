@@ -1539,15 +1539,12 @@ class MainWindow(QMainWindow):
         task.start()
 
     def _progress(self, done, total):
-        self.progress_total = total // 2
-        files = total // 2
-        self.progress.file_count = files
-        self.progress.setRange(0, max(files, 1))
-        self.progress.setValue(max(0, done - files))
-        if done <= files:
-            self.progress.setFormat(f"Preparing {done:,} / {files:,} files · %p%")
-        else:
-            self.progress.setFormat(f"{self.operation} {done - files:,} / {files:,} files · %p%")
+        # Each file is reported once, when it reaches its final name.
+        self.progress_total = total
+        self.progress.file_count = total
+        self.progress.setRange(0, max(total, 1))
+        self.progress.setValue(done)
+        self.progress.setFormat(f"{self.operation} {done:,} / {total:,} files · %p%")
 
     def _finish_progress(self, success):
         maximum = self.progress.file_count or 100

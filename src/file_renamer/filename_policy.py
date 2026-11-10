@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 
+HIDDEN_RESULT_ERROR = "New name would start with a dot, which hides the file"
+
 
 def reserved_windows(name: str) -> bool:
     reserved = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}

@@ -410,16 +410,13 @@ def test_offscreen_saved_position_is_recovered(app, tmp_path):
 @pytest.mark.parametrize("operation", ["Renaming", "Restoring"])
 def test_progress_counts_completed_files(window, operation):
     window.operation = operation
-    window._progress(1, 6)
-    assert window.progress.text() == "Preparing 1 / 3 files · 0%"
-    window._progress(3, 6)
-    assert window.progress.text() == "Preparing 3 / 3 files · 0%"
+    window._progress(0, 3)
     assert window.progress.file_count == 3
     assert window.progress.value() == 0
-    window._progress(4, 6)
+    window._progress(1, 3)
     assert window.progress.value() == 1
     assert window.progress.text() == f"{operation} 1 / 3 files · 33%"
-    window._progress(6, 6)
+    window._progress(3, 3)
     window._finish_progress(True)
     label = "Renamed" if operation == "Renaming" else "Restored"
     assert window.progress.text() == f"{label} 3 / 3 files · 100%"
@@ -523,7 +520,7 @@ def test_sort_stacked_names_by_destination(app, window, make_entry):
 
 def test_progress_large_batch_is_file_based(window):
     window.operation = "Renaming"
-    window._progress(15000, 20000)
+    window._progress(5000, 10000)
     assert window.progress.file_count == 10000
     assert window.progress.value() == 5000
     assert window.progress.text() == "Renaming 5,000 / 10,000 files · 50%"
@@ -936,7 +933,7 @@ def test_centered_status_and_long_message_keep_fixed_bar(window):
     assert bar.height() == height and window.minimumWidth() == minimum
     assert height >= bar.fontMetrics().height() + 12
     window.operation = "Renaming"
-    window._progress(4, 6)
+    window._progress(1, 3)
     assert bar.text() == "Renaming 1 / 3 files · 33%"
     window._finish_progress(False)
     assert "failed" in bar.text()
@@ -1301,28 +1298,18 @@ def test_help_uses_current_version_and_rule_syntax(window, monkeypatch):
     assert 'Legacy presets keep zero-based positions and Python regex' in shown[0]
 
 
-def test_hidden_flac_preview_warns_before_rename_and_undo(app, window, make_entry):
+def test_hidden_flac_result_is_blocked_in_preview(app, window, make_entry):
     from file_renamer.smoke import flac_fixture
 
     audio = flac_fixture(title="Hidden-name preview")
     entry = make_entry("01. Song.flac", audio)
-    window.rules = [RuleSpec("insert", options={"text": "."})]
+    window.rules = [RuleSpec("strip", options={"digits": True})]
     window._fill_rules()
     window.add_paths([entry.path])
     wait_until(app, lambda: window.model.plan is not None)
-    status = window.model.index(0, 2)
-    assert window.model.data(status) == "Hidden on Linux"
-    assert "Ctrl+H" in window.model.data(status, Qt.ToolTipRole)
-    assert "Linux file managers hide" in window.model.data(status, Qt.AccessibleDescriptionRole)
-    assert "Warning: 1 hidden on Linux" in window.progress.text()
-    assert "Warning" in window.rename.toolTip()
-    assert window.rename.isEnabled() and not window.model.plan.errors
-    destination = Path(window.model.plan.files[0].destination)
-    window.rename.click()
-    wait_until(app, lambda: not window.busy)
-    assert destination.read_bytes() == audio
-    window.undo.click()
-    wait_until(app, lambda: not window.busy)
+    assert Path(window.model.plan.files[0].destination).name == ". Song.flac"
+    assert "start with a dot" in window.model.data(window.model.index(0, 2))
+    assert window.model.plan.errors and not window.rename.isEnabled()
     assert Path(entry.path).read_bytes() == audio
 
 

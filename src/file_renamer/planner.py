@@ -4,7 +4,7 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
-from .filename_policy import filename_error
+from .filename_policy import HIDDEN_RESULT_ERROR, filename_error
 from .filesystem import hidden_path, matches, name_error, path_key
 from .models import FileEntry, PlannedFile, RenamePlan, RuleSpec
 from .rules import apply_rule
@@ -31,6 +31,10 @@ def validate_plan(plan: RenamePlan) -> RenamePlan:
         if source.parent != target.parent:
             error = "Files must remain in their current folder"
         error = error or name_error(target, limits)
+        if not error and target.name != source.name and target.name.startswith("."):
+            # File managers hide such names and this app does not load hidden
+            # files, so the result would be out of reach of a later batch.
+            error = HIDDEN_RESULT_ERROR
         rows[i] = replace(item, error=error)
         source_key = path_key(source, sensitivity)
         if source_key in sources:

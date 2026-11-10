@@ -56,7 +56,7 @@ def test_log_name_is_synced_after_creation_before_any_source_move(make_entry, tm
     monkeypatch.setattr(transactions, "rename_no_replace", rename)
     result = manager.execute(_plan(entry))
     assert result.success, result.message
-    assert len(moves) == 2
+    assert len(moves) == 1  # Straight to the new name; nothing is staged.
     assert manager.restore().success
     assert Path(entry.path).read_bytes() == b"fLaC synthetic fixture"
 

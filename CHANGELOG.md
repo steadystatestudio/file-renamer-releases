@@ -1,5 +1,18 @@
 # Changes
 
+## Unreleased
+
+Prompted by a report that 2.2.8 "deleted" FLAC files on Linux Mint. No release overwrites or deletes file contents, but two faults could leave files hidden so they appeared to be gone. Both are reproduced in tests and corrected.
+
+- Block a rename whose result would start with a dot (for example, removing the digits from `01. Title.flac` gives `. Title.flac`). File managers hide such names and File Renamer does not load hidden files, so the result was out of reach.
+- Move each file straight to its new name. Only swaps, longer cycles and case-only changes pass through a temporary name, one file per cycle, and that name is now visible and keeps the original stem and extension (`Title.file-renamer-<id>.flac`) instead of a hidden `.file-renamer-<id>.tmp`.
+- Stop treating device and inode numbers as permanent on FAT, exFAT, network and FUSE folders, where they can change during a batch. Previously that change made every staged file fail its check, cancelled the rollback and left the whole batch under hidden temporary names that Recover refused to touch.
+- Recover and Undo now restore every file they can and report the rest, instead of stopping at the first file that cannot be verified. Batches stranded by 2.2.8 or 2.2.9 are restored by Recover from the existing journal.
+- Detect case-insensitive folders (FAT, exFAT, NTFS mounts) by asking the folder itself, so case-only renames and collision checks behave correctly there.
+- Never follow a link or write to a shared file when opening the recovery log.
+- Name files left by an interrupted rename when a folder is added, rather than listing them as ordinary hidden items.
+- Report progress once per file.
+
 ## 2.2.9 — 2026-11-08
 
 - Check source-folder directory syncing before staging filenames, preserving originals and prior Undo when the filesystem rejects syncing.

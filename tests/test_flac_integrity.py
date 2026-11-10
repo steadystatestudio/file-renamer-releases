@@ -47,7 +47,8 @@ def test_flac_album_rename_then_restart_undo(tmp_path):
     verify_album(folder, tracks)
 
 
-@pytest.mark.parametrize("stop_after", range(1, 7))
+# Each of the three tracks moves once: straight to its new name.
+@pytest.mark.parametrize("stop_after", range(1, 4))
 def test_flac_album_cancel_restores_originals(tmp_path, stop_after):
     folder, tracks, entries = album(tmp_path)
     plan = build_plan(entries, [RuleSpec("insert", options={"text": "renamed_"})])
@@ -56,7 +57,7 @@ def test_flac_album_cancel_restores_originals(tmp_path, stop_after):
         plan, lambda: complete[0] >= stop_after,
         lambda done, total: complete.__setitem__(0, done),
     )
-    if stop_after == 6:
+    if stop_after == 3:
         assert result.success, result.message
         assert TransactionManager(tmp_path / "journal.json").restore().success
     else:
@@ -64,7 +65,7 @@ def test_flac_album_cancel_restores_originals(tmp_path, stop_after):
     verify_album(folder, tracks)
 
 
-@pytest.mark.parametrize("exit_after", range(1, 7))
+@pytest.mark.parametrize("exit_after", range(1, 4))
 def test_real_process_exit_at_each_flac_move_recovers(tmp_path, exit_after):
     folder, tracks, entries = album(tmp_path)
     journal = tmp_path / "data" / "last-rename.json"
@@ -114,11 +115,26 @@ def test_flac_collision_preserves_both_tracks(tmp_path):
     verify_album(folder, tracks)
 
 
-def test_hidden_flac_output_keeps_audio_and_restart_undo(tmp_path):
+def test_rule_that_would_hide_flac_tracks_is_blocked(tmp_path):
+    folder, tracks, entries = album(tmp_path)
+    # "01. First Song.flac" without its digits is ". First Song.flac".
+    plan = build_plan(entries, [RuleSpec("strip", options={"digits": True})])
+    assert len(plan.errors) == 3 and not plan.changes
+    assert all("dot" in row.error for row in plan.errors)
+    result = TransactionManager(tmp_path / "journal.json").execute(plan)
+    assert not result.success and not result.recovery_required
+    verify_album(folder, tracks)
+
+
+def test_hidden_flac_output_from_earlier_release_can_be_undone(tmp_path, monkeypatch):
     folder, tracks, entries = album(tmp_path)
     plan = build_plan(entries, [RuleSpec("insert", options={"text": "."})])
+    assert plan.errors
+    legacy = RenamePlan(1, tuple(PlannedFile(row.entry, row.destination) for row in plan.files))
     journal = tmp_path / "journal.json"
-    result = TransactionManager(journal).execute(plan)
+    with monkeypatch.context() as patch:
+        patch.setattr("file_renamer.transactions.validate_plan", lambda value: value)
+        result = TransactionManager(journal).execute(legacy)
     assert result.success, result.message
     verify_album(folder, {"." + name: audio for name, audio in tracks.items()})
     assert TransactionManager(journal).restore().success

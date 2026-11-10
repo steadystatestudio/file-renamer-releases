@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import re
 import stat
 import sys
 from pathlib import Path
@@ -41,11 +42,92 @@ def regular_identity(path: str | Path) -> FileIdentity:
     return FileIdentity(info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
 
 
+# Filesystems whose inode numbers are permanent properties of a file. FAT,
+# exFAT, network and FUSE mounts assign numbers when a file is loaded, so the
+# same file can report a different inode (or device) later in one batch.
+STABLE_ID_FILESYSTEMS = frozenset({
+    "bcachefs", "btrfs", "ext2", "ext3", "ext4", "f2fs", "jfs", "nilfs2",
+    "ntfs", "refs", "tmpfs", "xfs", "zfs",
+})
+_filesystem_types: dict[str, str] = {}
+
+
+def _linux_filesystem_type(directory: str) -> str:
+    best, found = -1, ""
+    with open("/proc/self/mountinfo", encoding="utf-8", errors="surrogateescape") as handle:
+        for line in handle:
+            left, separator, right = line.partition(" - ")
+            fields = left.split()
+            if not separator or len(fields) < 5:
+                continue
+            # Spaces and similar bytes in a mount point are written as \040 octal escapes.
+            mount = os.fsdecode(re.sub(
+                rb"\\([0-7]{3})", lambda found: bytes([int(found.group(1), 8)]), os.fsencode(fields[4])))
+            inside = directory == mount or directory.startswith(mount.rstrip("/") + "/")
+            # A later line for the same mount point is the one mounted on top.
+            if inside and len(mount) >= best:
+                best, found = len(mount), right.split()[0]
+    return found
+
+
+def _windows_filesystem_type(directory: str) -> str:
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    volume = ctypes.create_unicode_buffer(32768)
+    kernel.GetVolumePathNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+    kernel.GetVolumePathNameW.restype = wintypes.BOOL
+    if not kernel.GetVolumePathNameW(directory, volume, len(volume)):
+        return ""
+    name = ctypes.create_unicode_buffer(64)
+    kernel.GetVolumeInformationW.argtypes = [
+        wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+        ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.DWORD), wintypes.LPWSTR, wintypes.DWORD]
+    kernel.GetVolumeInformationW.restype = wintypes.BOOL
+    if not kernel.GetVolumeInformationW(volume.value, None, 0, None, None, None, name, len(name)):
+        return ""
+    return name.value
+
+
+def filesystem_type(directory: str | Path) -> str:
+    """Lower-case filesystem name for a directory, or "" when it cannot be read."""
+    directory = os.path.realpath(directory)
+    if directory not in _filesystem_types:
+        try:
+            if os.name == "nt":
+                found = _windows_filesystem_type(directory)
+            elif sys.platform.startswith("linux"):
+                found = _linux_filesystem_type(directory)
+            else:
+                found = ""
+        except (OSError, ValueError):
+            found = ""
+        if len(_filesystem_types) > 256:
+            _filesystem_types.clear()
+        _filesystem_types[directory] = found.lower()
+    return _filesystem_types[directory]
+
+
+def stable_file_ids(directory: str | Path) -> bool:
+    return filesystem_type(directory) in STABLE_ID_FILESYSTEMS
+
+
 def matches(path: str | Path, identity: FileIdentity) -> bool:
+    """Whether path still holds the recorded file.
+
+    Device and inode are compared only where they are permanent. Elsewhere a
+    regular, unlinked file with the recorded size and modification time at the
+    recorded path is the same file; every move remains no-clobber regardless.
+    """
     try:
-        return regular_identity(path) == identity
+        found = regular_identity(path)
     except (OSError, ValueError):
         return False
+    if found == identity:
+        return True
+    if (found.size, found.modified_ns) != (identity.size, identity.modified_ns):
+        return False
+    return not stable_file_ids(Path(os.path.abspath(path)).parent)
 
 
 def directory_case_sensitive(path: Path) -> bool:
@@ -61,6 +143,32 @@ def directory_case_sensitive(path: Path) -> bool:
             return not bool(flags[0] & 0x40000000)  # FS_CASEFOLD_FL
         except OSError:
             pass
+    return _probe_case_sensitive(path)
+
+
+def _probe_case_sensitive(path: Path) -> bool:
+    """Ask the directory itself (FAT, exFAT, NTFS and network mounts have no flag).
+
+    An existing name answers under its swapped-case spelling only on a
+    case-insensitive directory, unless that spelling is a real sibling.
+    """
+    try:
+        with os.scandir(path) as entries:
+            for count, entry in enumerate(entries):
+                if count >= 64:
+                    break
+                swapped = entry.name.swapcase()
+                if swapped == entry.name:
+                    continue
+                try:
+                    os.lstat(os.path.join(path, swapped))
+                except FileNotFoundError:
+                    return True
+                except OSError:
+                    continue
+                return swapped in os.listdir(path)
+    except OSError:
+        pass
     return True
 
 
@@ -97,7 +205,10 @@ def scan_paths(paths: list[str], recursive: bool, cancelled=lambda: False) -> tu
         path = Path(os.path.abspath(stack.pop()))
         try:
             if hidden_path(path):
-                errors.append(f"Skipped hidden item: {path}")
+                if path.name.startswith(".file-renamer-") and path.suffix == ".tmp":
+                    errors.append(f"Left by an interrupted rename; use Recover to restore its name: {path}")
+                else:
+                    errors.append(f"Skipped hidden item: {path}")
                 continue
             if linked(path):
                 errors.append(f"Skipped link: {path}")

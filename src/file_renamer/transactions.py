@@ -3,16 +3,56 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import stat
 import uuid
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Callable
 
-from .filesystem import matches, path_key, rename_no_replace
+from .filesystem import matches, path_key, regular_identity, rename_no_replace
 from .models import FileIdentity, OperationResult, RenamePlan
 from .planner import validate_plan
 from .storage import atomic_json, read_json, serialize_json
 from .storage import sync_directory as _sync_directory
+
+TEMPORARY_MARKER = ".file-renamer-"
+_TEMPORARY_NAME = re.compile(r"\.file-renamer-[0-9a-f]{12,32}(\.|$)")
+
+
+def temporary_name(original: str | Path, token: str, limit: int = 255) -> str:
+    """A visible, recognizable staging name that keeps the stem and extension.
+
+    Earlier releases staged under ".file-renamer-<id>.tmp", which hid the file
+    and discarded its name if a batch could not finish.
+    """
+    original = Path(original)
+    stem, suffix = original.stem.lstrip(".") or "file", original.suffix
+    tail = f"{TEMPORARY_MARKER}{token}{suffix}"
+    if len(os.fsencode(tail)) > limit - 4:
+        tail = f"{TEMPORARY_MARKER}{token}"
+
+    def length(name: str) -> int:
+        return max(len(os.fsencode(name)), len(name.encode("utf-16-le", "surrogatepass")) // 2)
+
+    while len(stem) > 1 and length(stem + tail) > limit:
+        stem = stem[:-1]
+    return stem + tail
+
+
+def is_temporary_name(name: str) -> bool:
+    return bool(_TEMPORARY_NAME.search(name))
+
+
+def _name_limit(directory: Path) -> int:
+    if os.name != "nt":
+        try:
+            limit = os.pathconf(directory, "PC_NAME_MAX")
+            if limit > 0:
+                return min(limit, 255)
+        except (OSError, ValueError):
+            pass
+    return 255
 
 
 def _recovery_capacity_snapshot(data: dict) -> dict:
@@ -23,7 +63,9 @@ def _recovery_capacity_snapshot(data: dict) -> dict:
     records = []
     longest_paths = []
     for row in data["records"]:
-        temporary = str(Path(row["original"]).with_name(".file-renamer-" + "0" * 32 + ".tmp"))
+        # Untruncated, so it bounds every staging name the batch can use.
+        original = Path(row["original"])
+        temporary = str(original.with_name(original.name + TEMPORARY_MARKER + "0" * 32 + original.suffix))
         longest = max((row["original"], row["target"], temporary), key=path_size)
         records.append(row | {"current": longest})
         longest_paths.append(longest)
@@ -106,13 +148,30 @@ class TransactionManager:
             return
         self._save(data)
 
+    def _open_log(self, truncate: bool = False):
+        """Open the move log without following a link or touching a shared file."""
+        path = self.journal.with_suffix(".log")
+        if path.is_symlink():
+            raise OSError(f"Recovery log must not be a link: {path}")
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(path, flags, 0o600)
+        try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink > 1:
+                raise OSError(f"Recovery log must be a private regular file: {path}")
+            if truncate:
+                os.ftruncate(descriptor, 0)
+            return os.fdopen(descriptor, "r+b")
+        except BaseException:
+            os.close(descriptor)
+            raise
+
     def _append(self, data: dict, event: dict) -> None:
         """Fsync a small event instead of rewriting the whole batch for every file."""
         sequence = data.get("sequence", 0) + 1
         payload = event | {"sequence": sequence, "transaction": data["transaction"]}
-        path = self.journal.with_suffix(".log")
-        with path.open("a+b") as handle:
-            length = handle.tell()
+        with self._open_log() as handle:
+            length = handle.seek(0, os.SEEK_END)
             if length:
                 handle.seek(-1, os.SEEK_END)
                 if handle.read(1) != b"\n":
@@ -125,15 +184,29 @@ class TransactionManager:
             os.fsync(handle.fileno())
         data["sequence"] = sequence
 
+    @staticmethod
+    def _holds(path: str, record: dict) -> bool:
+        """Whether path holds this record's file."""
+        identity = FileIdentity(**record["identity"])
+        if matches(path, identity):
+            return True
+        # Only this app creates its unique staging names, so the journal entry
+        # is the authority there even where device or inode numbers changed.
+        if path in (record["original"], record["target"]) or not is_temporary_name(Path(path).name):
+            return False
+        try:
+            return regular_identity(path).size == identity.size
+        except (OSError, ValueError):
+            return False
+
     def _reconcile(self, data: dict) -> None:
         pending = data.get("pending")
         if not pending:
             return
         record = data["records"][pending["index"]]
-        identity = FileIdentity(**record["identity"])
-        at_from, at_to = matches(pending["from"], identity), matches(pending["to"], identity)
+        at_from, at_to = self._holds(pending["from"], record), self._holds(pending["to"], record)
         if at_from == at_to:
-            raise OSError(f"Cannot safely locate interrupted file: {pending['from']} → {pending['to']}")
+            raise OSError(f"Cannot safely locate interrupted file: {pending['from']} \u2192 {pending['to']}")
         record["current"] = pending["to"] if at_to else pending["from"]
         data["pending"] = None
         self._append(data, {"index": pending["index"], "current": record["current"], "pending": None})
@@ -141,7 +214,7 @@ class TransactionManager:
     def _move(self, data: dict, index: int, target: str) -> None:
         record = data["records"][index]
         source = record["current"]
-        if not matches(source, FileIdentity(**record["identity"])):
+        if not self._holds(source, record):
             raise OSError(f"File changed or disappeared: {source}")
         data["pending"] = {"index": index, "from": source, "to": target}
         self._append(data, {"pending": data["pending"]})
@@ -154,42 +227,111 @@ class TransactionManager:
 
     @staticmethod
     def _preflight_directories(data: dict) -> None:
-        # Detect filesystems that reject directory syncing before hiding any
-        # originals under temporary names. Every later move still syncs again.
+        # Detect filesystems that reject directory syncing before any file
+        # moves. Every later move still syncs again.
         for parent in dict.fromkeys(Path(row["original"]).parent for row in data["records"]):
             _sync_directory(parent)
 
-    def _transfer(self, data: dict, destination_key: str, cancelled: Callable[[], bool], progress) -> None:
+    def _transfer(self, data: dict, destination_key: str, cancelled: Callable[[], bool], progress,
+                  best_effort: bool = False) -> None:
+        """Move every record to its destination name.
+
+        A file moves straight to its destination whenever that name is free.
+        Only swaps, longer cycles and case-only changes pass through a staging
+        name, one file per cycle. With best_effort (restoring originals), a
+        file that cannot be moved is reported after every other file has been
+        restored instead of stopping the whole batch.
+        """
         self._reconcile(data)
         records = data["records"]
-        moving = [i for i, row in enumerate(records) if row["current"] != row[destination_key]]
-        for row in records:
-            if not matches(row["current"], FileIdentity(**row["identity"])):
-                raise OSError(f"File changed or disappeared: {row['current']}")
-        occupied = {path_key(row["current"]): row for row in records}
-        for row in records:
-            target = row[destination_key]
+        sensitivity: dict[str, bool] = {}
+        failures: list[str] = []
+
+        def key(path: str) -> str:
+            return path_key(path, sensitivity)
+
+        def failed(index: int, error: Exception) -> None:
+            if not best_effort:
+                raise error
+            failures.append(str(error))
+            pending.discard(index)
+
+        pending = {i for i, row in enumerate(records) if row["current"] != row[destination_key]}
+        for index, row in enumerate(records):
+            if not self._holds(row["current"], row):
+                error = OSError(f"File changed or disappeared: {row['current']}")
+                if not best_effort:
+                    raise error
+                if index in pending:
+                    failed(index, error)
+        occupied = {key(row["current"]): index for index, row in enumerate(records)}
+        for index in sorted(pending):
+            target = records[index][destination_key]
             if os.path.lexists(target):
-                owner = occupied.get(path_key(target))
-                if owner is None or not matches(target, FileIdentity(**owner["identity"])):
-                    raise FileExistsError(f"Destination already exists: {target}")
-        # Stage all changing entries so swaps and longer cycles can be resolved.
-        total = len(moving) * 2
-        done = 0
-        for index in moving:
-            if cancelled():
-                raise InterruptedError("Rename cancelled")
-            row = records[index]
-            temporary = str(Path(row["original"]).with_name(f".file-renamer-{uuid.uuid4().hex}.tmp"))
-            self._move(data, index, temporary)
-            done += 1
-            progress(done, total)
-        for index in moving:
-            if cancelled():
-                raise InterruptedError("Rename cancelled")
-            self._move(data, index, records[index][destination_key])
-            done += 1
-            progress(done, total)
+                owner = occupied.get(key(target))
+                if owner is None or not self._holds(target, records[owner]):
+                    failed(index, FileExistsError(f"Destination already exists: {target}"))
+
+        total, done = len(pending), 0
+
+        def relocate(index: int, target: str) -> bool:
+            source = records[index]["current"]
+            try:
+                self._move(data, index, target)
+            except OSError as exc:
+                if not best_effort:
+                    raise
+                self._reconcile(data)  # The move was logged as pending; settle where the file is.
+                failed(index, exc)
+                return False
+            if occupied.get(key(source)) == index:
+                del occupied[key(source)]
+            occupied[key(target)] = index
+            return True
+
+        def stage(index: int) -> bool:
+            original = Path(records[index]["original"])
+            name = temporary_name(original, uuid.uuid4().hex[:16], _name_limit(original.parent))
+            return relocate(index, str(original.with_name(name)))
+
+        for first in sorted(pending):
+            if first not in pending:
+                continue
+            chain, seen, index = [], set(), first
+            while True:
+                chain.append(index)
+                seen.add(index)
+                blocker = occupied.get(key(records[index][destination_key]))
+                if blocker is None or blocker not in pending:
+                    break
+                if blocker in seen:
+                    if cancelled():
+                        raise InterruptedError("Rename cancelled")
+                    stage(blocker)  # A swap, cycle or case-only change: free one name.
+                    break
+                index = blocker
+            for index in reversed(chain):
+                if index not in pending:
+                    continue
+                if cancelled():
+                    raise InterruptedError("Rename cancelled")
+                target = records[index][destination_key]
+                try:
+                    moved = relocate(index, target)
+                except FileExistsError:
+                    # A case-insensitive folder that reported itself as case-sensitive.
+                    current = records[index]["current"]
+                    if not (os.path.lexists(target) and os.path.samefile(current, target)):
+                        raise
+                    self._reconcile(data)
+                    moved = stage(index) and relocate(index, target)
+                if moved:
+                    pending.discard(index)
+                    done += 1
+                    progress(done, total)
+        if failures:
+            more = f" (and {len(failures) - 1} more)" if len(failures) > 1 else ""
+            raise OSError(f"{failures[0]}{more}")
 
     def execute(self, plan: RenamePlan, cancelled=lambda: False, progress=lambda *_: None) -> OperationResult:
         previous = self.load()
@@ -219,7 +361,7 @@ class TransactionManager:
         try:
             self._save(data)
             # A new transaction ID makes old events harmless if interruption occurs here.
-            with self.journal.with_suffix(".log").open("wb") as handle:
+            with self._open_log(truncate=True) as handle:
                 handle.flush()
                 os.fsync(handle.fileno())
             # Fsyncing the log's contents does not persist a newly created name.
@@ -249,7 +391,7 @@ class TransactionManager:
             # Read the durable state: a move may have completed before a journal update failed.
             try:
                 data = self.load()
-                self._transfer(data, "original", lambda: False, lambda *_: None)
+                self._transfer(data, "original", lambda: False, lambda *_: None, best_effort=True)
                 data["status"] = "rolled_back"
                 self._save(data)
                 return OperationResult(False, f"{exc}\nAll filenames were restored.", self._paths(data))
@@ -266,7 +408,7 @@ class TransactionManager:
             self._preflight_directories(data)
             data["status"] = "active"
             self._checkpoint_recovery(data)
-            self._transfer(data, "original", lambda: False, progress)
+            self._transfer(data, "original", lambda: False, progress, best_effort=True)
             data["status"] = "undone" if was_committed else "rolled_back"
             self._checkpoint_recovery(data)
             paths = tuple((source, row["original"]) for source, row in zip(before, data["records"]))
